@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F14">
+<link rel="icon" href="/favicon.png" type="image/png">
+<title>EZ Baccarat Wizard 取扱説明書</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111826; --panel2:#1b2637; --line:#2a3a52;
+    --gold:#d4b45a; --gold-l:#f2d98d; --ink:#f4f1e8; --ink2:#b7c0ce; --ink3:#78838f;
+    --win:#2ecc8f; --lose:#e5484d; --banker:#e5484d; --player:#4e97d6; --tie:#b58c3c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#16233a 0%,transparent 60%),var(--bg);
+    color:var(--ink);font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic UI",system-ui,sans-serif;
+    line-height:1.9;font-size:15px}
+  main{max-width:720px;margin:0 auto;padding:24px 18px 80px}
+  h1{font-size:22px;background:linear-gradient(135deg,var(--gold),var(--gold-l));
+    -webkit-background-clip:text;background-clip:text;color:transparent;margin:8px 0 4px}
+  .sub{color:var(--ink3);font-size:12px;margin-bottom:24px}
+  h2{font-size:17px;color:var(--gold-l);border-bottom:1px solid var(--line);
+    padding-bottom:6px;margin:40px 0 12px}
+  h3{font-size:14.5px;color:var(--gold);margin:22px 0 6px}
+  p{margin:8px 0}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+    border:1px solid rgba(212,180,90,.28);border-radius:14px;padding:14px 16px;margin:14px 0}
+  .warn{border-color:rgba(229,72,77,.5)}
+  .warn h3{color:var(--lose);margin-top:0}
+  ul,ol{padding-left:22px;margin:8px 0}
+  li{margin:5px 0}
+  b{color:var(--ink)}
+  .k{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    border-radius:6px;padding:0 8px;font-size:13px;color:var(--gold-l);white-space:nowrap}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}
+  th{color:var(--ink3);font-weight:600;font-size:12px}
+  td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .spots{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0;font-size:11.5px;text-align:center}
+  .spots div{border:1.5px solid var(--line);border-radius:10px;padding:10px 2px;background:var(--panel)}
+  .sB{border-color:var(--banker)!important}.sP{border-color:var(--player)!important}
+  .sT{border-color:var(--tie)!important}.sG{border-color:var(--gold)!important}
+  .w2{grid-column:span 2}
+  .toc{font-size:14px}
+  .toc a{color:var(--gold-l);text-decoration:none}
+  .toc a:active{opacity:.7}
+  .note{font-size:12.5px;color:var(--ink2)}
+  .foot{margin-top:48px;font-size:11.5px;color:var(--ink3);border-top:1px solid var(--line);padding-top:14px}
+  .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;
+    padding:1px 10px;font-size:11px;color:var(--ink2);margin-right:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1>EZ Baccarat Wizard 取扱説明書</h1>
+  <div class="sub">バカラ専用セッション記録・資金管理アプリ / データは端末内のみ・オフライン対応</div>
+
+  <div class="card toc">
+    <b>目次</b><br>
+    <a href="#install">1. インストール</a><br>
+    <a href="#concept">2. このアプリの考え方(最初に読んでください)</a><br>
+    <a href="#start">3. セッションを始める</a><br>
+    <a href="#record">4. ハンドを記録する</a><br>
+    <a href="#roads">5. 罫線と確率</a><br>
+    <a href="#money">6. 資金管理</a><br>
+    <a href="#stats">7. 統計を見る</a><br>
+    <a href="#sim">8. 検証(シミュレーター)</a><br>
+    <a href="#settings">9. 設定</a><br>
+    <a href="#data">10. データの保存とバックアップ</a><br>
+    <a href="#faq">11. よくある質問</a>
+  </div>
+
+  <h2 id="install">1. インストール</h2>
+  <p>アプリストアは使いません。ブラウザで <b>https://ezb-wizard.github.io/</b> を開き、ホーム画面に追加するだけです。</p>
+  <ul>
+    <li><b>iPhone</b>: Safariで開く → 共有ボタン(□に↑) → <span class="k">ホーム画面に追加</span></li>
+    <li><b>Android</b>: Chromeで開く → メニュー(⋮) → <span class="k">アプリをインストール</span></li>
+  </ul>
+  <p class="note">一度開けば以降は電波のない場所でも全機能が動きます(為替レートのみ最後に取得した値を使用)。</p>
+
+  <h2 id="concept">2. このアプリの考え方</h2>
+  <div class="card warn">
+    <h3>予測はできません・しません</h3>
+    <p>バカラの各ハンドは<b>独立試行</b>です。罫線や過去の出目から次の結果を予測する方法は存在せず、
+    確率は常に一定(バンカー45.86% / プレイヤー44.62% / タイ9.52%)です。
+    このアプリは「次に何が来るか」を教える道具ではなく、<b>①正確な記録 ②破産を防ぐ資金管理
+    ③理論値と実績の正直な可視化</b>のための道具です。</p>
+  </div>
+  <p>期待値がマイナスのゲームでは賭け金の工夫で勝ちを増やすことはできません。
+  推奨ベット額・ストップロスは「勝つため」ではなく<b>長く楽しみ、大負けを防ぐため</b>の仕組みです。</p>
+
+  <h2 id="start">3. セッションを始める</h2>
+  <p>カジノで席に着いたら<span class="k">記録</span>タブでセッションを開始します。</p>
+  <ol>
+    <li><b>開始資金</b> — <span class="k">₩</span>/<span class="k">¥</span>を切替可能。¥で入力するとその日のレートで自動的に₩へ換算され、使ったレートと時刻も記録されます</li>
+    <li><b>テーブル最小/最大</b> — 台の表示どおりに(初期値: ₩100,000 / ₩30,000,000)</li>
+    <li><b>本線配当(バンカーの方式)</b> — 台によって3種類あります:
+      <table>
+        <tr><th>方式</th><th>内容</th><th>控除率</th></tr>
+        <tr><td><b>6は半額</b>(初期値)</td><td>1:1払い。ただしバンカーが合計6で勝つと半額(0.5倍)払い。タイガー系テーブルの標準</td><td class="num">1.46%</td></tr>
+        <tr><td><b>EZ(D7押し)</b></td><td>1:1払い。ただしバンカーが3枚の合計7で勝つと引き分け(返金)</td><td class="num">1.02%</td></tr>
+        <tr><td><b>コミッション</b></td><td>勝つたび0.95倍払い(5%控除)</td><td class="num">1.06%</td></tr>
+      </table>
+    </li>
+    <li><b>サイドベット構成</b> — 台にあるものをON、配当も台の表示に合わせて修正(控除率が自動計算されます)</li>
+    <li><b>ストップロス/テイクプロフィット</b> — 額または%で設定すると、到達時に全画面で知らせます(初期値: なし)</li>
+    <li>台の設定を毎回使うなら<span class="k">このカジノの既定として保存</span>を押す</li>
+  </ol>
+
+  <h2 id="record">4. ハンドを記録する</h2>
+  <h3>4-1. ベットを置く</h3>
+  <p>画面下部のチップ(10万/50万/100万/500万・変更可)を選び、賭けたい場所をタップ。タップするたび加算、<b>✕</b>で取り消し。配置は実際のテーブルと同じです:</p>
+  <div class="spots">
+    <div class="sP">スモール<br>ドラゴン</div><div class="sG">ドラゴン<br>タイガー</div><div class="sP">ビッグ<br>ドラゴン</div>
+    <div class="sB">スモール<br>タイガー</div><div class="sT">タイ</div><div class="sB">ビッグ<br>タイガー</div>
+    <div class="sB">バンカー<br>ペア</div><div class="sB w2">バンカー</div>
+    <div class="sP">プレイヤー<br>ペア</div><div class="sP w2">プレイヤー</div>
+  </div>
+  <p class="note">賭けずに結果だけ記録する「見(けん)」もできます — ベットを置かずに結果ボタンを押すだけ。</p>
+
+  <h3>4-2. 結果を入れる</h3>
+  <p>勝負がついたら <span class="k">BANKER</span> <span class="k">PLAYER</span> <span class="k">TIE</span> の大ボタンをタップ。
+  必要な場合だけ追加の入力が出ます(不要な構成なら1〜3タップで登録完了):</p>
+  <ul>
+    <li><b>勝ち側の合計値</b> — バンカー勝ちでは精算に必要(6半額/D7の判定)。★必須表示に従ってください</li>
+    <li><b>勝ち側の枚数(2枚/3枚)</b> — タイガー・ドラゴン系の判定に使用</li>
+    <li><b>負け側の合計値・枚数</b> — ドラゴンタイガーにベットした時だけ</li>
+    <li><b>ペア有無</b> — ペア系ベットが有効な台のみ。ベットした側は入力必須、それ以外は省略可</li>
+  </ul>
+  <p>精算(配当計算)はすべて自動です。ドラゴン7のプッシュ、バンカー6の半額、ドラゴンタイガーの枚数別配当(4枚30倍/5枚40倍/6枚100倍)も正確に処理されます。</p>
+
+  <h3>4-3. 間違えたら</h3>
+  <ul>
+    <li><b>直前の取り消し</b> — 履歴の<span class="k">↩ 取消</span></li>
+    <li><b>過去の修正・削除</b> — 履歴の行をタップすると編集画面が開きます</li>
+  </ul>
+
+  <h2 id="roads">5. 罫線と確率</h2>
+  <p>履歴横の<span class="k">罫線</span>ボタンで、カジノの電光掲示と同じ罫線が見られます:</p>
+  <table>
+    <tr><th>罫線</th><th>見方</th></tr>
+    <tr><td>大路(だいろ)</td><td>基本の出目表。同じ側の連勝は縦に伸びる。⚫マークはサイドベット成立</td></tr>
+    <tr><td>珠盤路</td><td>タイ含む全結果を順に並べたもの</td></tr>
+    <tr><td>大眼仔路/小路/甲由路</td><td>出目の「規則性(赤)/不規則性(青)」を表す伝統的な派生表</td></tr>
+  </table>
+  <p>上部の<b>確率パネル</b>には次のハンドの確率(理論値・常に一定)と、参考として実績が並びます。
+  <b>罫線は記録の確認用であり、どの罫線も次の結果とは無関係です。</b></p>
+  <p><b>途中参加</b>: 進行中の台に座ったときは<span class="k">途中参加:これまでの出目をまとめて登録</span>で、
+  掲示を見ながらB/P/Tを連続タップ→一括登録できます(賭けなしの「見」扱い)。</p>
+
+  <h2 id="money">6. 資金管理</h2>
+  <ul>
+    <li><b>ヘッダー常時表示</b> — 現在資金(₩と¥)/セッション収支/ストップロスまでの残額</li>
+    <li><b>推奨ベット額</b> — 現在資金×設定率(初期1.5%、設定で1〜10%)。「推奨額であと◯連敗」も表示</li>
+    <li><b>アラート</b> — ストップロス/テイクプロフィット到達で全画面表示。そこで終了するのが鉄則です</li>
+    <li>資金の10%を超えるベットを登録しようとすると確認が入ります</li>
+  </ul>
+
+  <h2 id="stats">7. 統計を見る</h2>
+  <p><span class="k">統計</span>タブでセッション別/全期間の成績が見られます:</p>
+  <ul>
+    <li>収支(₩/¥)・ハンド数・平均ベット額・最大ドローダウン</li>
+    <li>ベット別成績(バンカー/プレイヤー/タイ/各サイドベットの勝敗と収支)</li>
+    <li>資金推移グラフ(開始線・SL/TP線つき、₩/¥切替)</li>
+    <li>罫線一式</li>
+    <li><b>実績 vs 理論値</b> — 出現率の乖離と収束チャート。試行を重ねるほど理論値に近づくことが確認できます</li>
+    <li>セッション一覧 — 🗑で確定セッションを削除できます(元に戻せません)</li>
+  </ul>
+
+  <h2 id="sim">8. 検証(シミュレーター)</h2>
+  <p><span class="k">検証</span>タブは実プレイと切り離された教育用ツールです。マーチンゲール等7種のベット法を
+  1万回以上の試行でシミュレートし、<b>破産確率・収支のばらつき・最大ドローダウン</b>を確認できます。
+  どのベット法でも期待値(控除率)は変わらない、という事実を数字で体感するためのものです。</p>
+
+  <h2 id="settings">9. 設定</h2>
+  <ul>
+    <li><b>カジノ</b> — PARADISE仁川/INSPIRE仁川の切替。配当プリセットと画面のアクセント色が変わります</li>
+    <li><b>推奨ベット率</b> — 1〜10%(3%超は警告)</li>
+    <li><b>ベットチッププリセット</b> — 記録画面のチップ4種を自由に変更</li>
+    <li><b>為替</b> — 自動取得(起動時+1時間ごと)。両替所のレートを使いたい場合は手動入力→<span class="k">固定する</span></li>
+    <li><b>エクスポート</b> — CSV(表計算用)/JSON(完全バックアップ)</li>
+  </ul>
+
+  <h2 id="data">10. データの保存とバックアップ</h2>
+  <div class="card">
+    <p><b>すべての記録は、この端末のブラウザの中にだけ保存されます。</b>サーバーには何も送られません。
+    同じURLを他の人が使っても、データが混ざったり見られたりすることはありません。</p>
+  </div>
+  <ul>
+    <li>逆に、<b>機種変更・ブラウザのデータ削除・アプリの削除でデータは消えます</b></li>
+    <li>大事な記録は、セッション終了後に<span class="k">設定 → JSONエクスポート</span>でファイルを保存しておいてください</li>
+    <li>1台の端末を複数人で使うと記録が混ざります。1人1端末で</li>
+  </ul>
+
+  <h2 id="faq">11. よくある質問</h2>
+  <table>
+    <tr><th>質問</th><th>答え</th></tr>
+    <tr><td>次はバンカー?プレイヤー?</td><td>誰にも分かりません。確率は常に一定です(<a href="#concept" style="color:var(--gold-l)">2章</a>)。理論値ボタンでいつでも確認できます</td></tr>
+    <tr><td>アプリが更新されない</td><td>一度完全に閉じて開き直すと最新版になります</td></tr>
+    <tr><td>ホーム画面のアイコンが古い</td><td>アイコンを削除して「ホーム画面に追加」をやり直してください</td></tr>
+    <tr><td>台の配当がアプリと違う</td><td>セッション開始画面で数値を修正 → <span class="k">このカジノの既定として保存</span></td></tr>
+    <tr><td>電波がない場所でレートは?</td><td>最後に取得したレートを使用し、取得時点を表示します。両替レートを使うなら設定で手動固定を</td></tr>
+    <tr><td>タイのとき本線のベットは?</td><td>バンカー/プレイヤーへのベットは返金(プッシュ)として自動精算されます</td></tr>
+    <tr><td>登録を間違えた</td><td>履歴の「↩取消」または行をタップして編集・削除</td></tr>
+  </table>
+
+  <div class="foot">
+    <span class="pill">EZ Baccarat Wizard</span><span class="pill">個人利用</span><br>
+    本アプリは記録・資金管理・理論値の可視化のみを目的とし、勝利を保証するものではありません。
+    ギャンブルは余裕資金の範囲で、決めた損切りラインを守って楽しんでください。<br>
+    <a href="/" style="color:var(--gold-l)">← アプリに戻る</a>
+  </div>
+</main>
+</body>
+</html>

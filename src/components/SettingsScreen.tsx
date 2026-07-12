@@ -169,6 +169,17 @@ export default function SettingsScreen() {
         </section>
       )}
 
+      <section>
+        <a
+          href={`${import.meta.env.BASE_URL}manual.html`}
+          target="_blank"
+          rel="noreferrer"
+          className="press flex h-12 w-full items-center justify-center rounded-lg border border-gold-600/30 text-sm font-bold text-gold-300"
+        >
+          📖 取扱説明書を開く
+        </a>
+      </section>
+
       <section className="card-luxe p-3 text-[10px] leading-relaxed text-ink-3">
         <p>
           EZバカラ記録・資金管理(個人利用)。本アプリは記録・資金管理・理論値の可視化のみを目的とし、
