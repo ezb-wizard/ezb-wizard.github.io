@@ -1,17 +1,25 @@
-import type { Winner } from '../types'
+import type { MainBetRules, Winner } from '../types'
 
 /**
  * 8デッキ完全列挙による結果確率テーブル。
- * 勝者 × 勝利合計値 × 勝利ハンド枚数(タイは両ハンド枚数を保持)ごとの厳密な確率。
+ * 最初の4枚はランク単位(13種×32枚)で列挙してペア(同ランク)を厳密に判定し、
+ * 3枚目以降は値単位で列挙する(以降の判定は値のみに依存するため厳密性は保たれる)。
  */
 export interface OutcomeBucket {
   winner: Winner
-  /** 勝利側の合計値(タイの場合はタイ合計値) */
-  wTotal: number
-  /** 勝利側の枚数(タイの場合はプレイヤー側の枚数。タイ系判定では使用しない) */
-  wCards: 2 | 3
+  pTotal: number
+  bTotal: number
+  pCards: 2 | 3
+  bCards: 2 | 3
+  /** プレイヤー最初の2枚が同ランク */
+  pPair: boolean
+  /** バンカー最初の2枚が同ランク */
+  bPair: boolean
   prob: number
 }
+
+/** ランク→バカラ値(A=1, 2-9=数値, 10/J/Q/K=0) */
+const RANK_VALUE = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0]
 
 /** バンカーの3枚目ドロー規則(プレイヤーが3枚目 p3 を引いた場合) */
 function bankerDraws(bTotal: number, p3: number): boolean {
@@ -23,67 +31,108 @@ function bankerDraws(bTotal: number, p3: number): boolean {
   return false
 }
 
-/** 8デッキシューを完全列挙し、終局ごとの厳密確率を集計する(初回 ~100ms) */
-export function computeOutcomeTable(decks = 8): OutcomeBucket[] {
-  // 値0(10/J/Q/K)は各デッキ16枚、値1〜9は各4枚
-  const counts = [16 * decks, ...Array.from({ length: 9 }, () => 4 * decks)]
-  let remaining = 52 * decks
+/** バケットの一意インデックス(pT,bT,pC,bC,pPair,bPair) */
+function packIndex(pT: number, bT: number, pC: number, bC: number, pp: number, bp: number): number {
+  return ((((pT * 10 + bT) * 2 + (pC - 2)) * 2 + (bC - 2)) * 2 + pp) * 2 + bp
+}
 
-  const acc = new Map<string, OutcomeBucket>()
-  const settle = (pT: number, bT: number, pC: 2 | 3, bC: 2 | 3, prob: number) => {
-    const winner: Winner = pT > bT ? 'P' : bT > pT ? 'B' : 'T'
-    const wTotal = winner === 'B' ? bT : pT
-    const wCards = winner === 'B' ? bC : pC
-    const key = `${winner}|${wTotal}|${wCards}`
-    const b = acc.get(key)
-    if (b) b.prob += prob
-    else acc.set(key, { winner, wTotal, wCards, prob })
+export function computeOutcomeTable(decks = 8): OutcomeBucket[] {
+  const rankCounts = new Array<number>(13).fill(4 * decks) // 各ランク32枚
+  let remaining = 52 * decks
+  const acc = new Float64Array(10 * 10 * 2 * 2 * 2 * 2)
+
+  /** 3枚目用:現在のランク残数から値ごとの残数を作る */
+  const valueCounts = (): number[] => {
+    const v = new Array<number>(10).fill(0)
+    for (let r = 0; r < 13; r++) v[RANK_VALUE[r]] += rankCounts[r]
+    return v
   }
 
-  /** シューから1枚引く各値の確率で cb を呼ぶ(呼出し中はカウントを減算) */
-  const each = (cb: (v: number, p: number) => void) => {
-    for (let v = 0; v <= 9; v++) {
-      if (counts[v] === 0) continue
-      const p = counts[v] / remaining
-      counts[v]--
+  /** ランク単位で1枚引く */
+  const eachRank = (cb: (rank: number, p: number) => void) => {
+    for (let r = 0; r < 13; r++) {
+      if (rankCounts[r] === 0) continue
+      const p = rankCounts[r] / remaining
+      rankCounts[r]--
       remaining--
-      cb(v, p)
-      counts[v]++
+      cb(r, p)
+      rankCounts[r]++
       remaining++
     }
   }
 
-  each((p1, q1) =>
-    each((b1, q2) =>
-      each((p2, q3) =>
-        each((b2, q4) => {
-          const pt = (p1 + p2) % 10
-          const bt = (b1 + b2) % 10
+  eachRank((p1, q1) =>
+    eachRank((b1, q2) =>
+      eachRank((p2, q3) =>
+        eachRank((b2, q4) => {
+          const pt = (RANK_VALUE[p1] + RANK_VALUE[p2]) % 10
+          const bt = (RANK_VALUE[b1] + RANK_VALUE[b2]) % 10
+          const pp = p1 === p2 ? 1 : 0
+          const bp = b1 === b2 ? 1 : 0
           const base = q1 * q2 * q3 * q4
+
           if (pt >= 8 || bt >= 8) {
-            settle(pt, bt, 2, 2, base) // ナチュラル
+            acc[packIndex(pt, bt, 2, 2, pp, bp)] += base // ナチュラル
             return
           }
+
+          // 3枚目以降は値単位(without replacement)
+          const vc = valueCounts()
+          let rem3 = remaining
+
           if (pt <= 5) {
-            each((p3, q5) => {
+            for (let p3 = 0; p3 <= 9; p3++) {
+              if (vc[p3] === 0) continue
+              const q5 = vc[p3] / rem3
               const pt3 = (pt + p3) % 10
               if (bankerDraws(bt, p3)) {
-                each((b3, q6) => settle(pt3, (bt + b3) % 10, 3, 3, base * q5 * q6))
+                vc[p3]--
+                rem3--
+                for (let b3 = 0; b3 <= 9; b3++) {
+                  if (vc[b3] === 0) continue
+                  const q6 = vc[b3] / rem3
+                  acc[packIndex(pt3, (bt + b3) % 10, 3, 3, pp, bp)] += base * q5 * q6
+                }
+                vc[p3]++
+                rem3++
               } else {
-                settle(pt3, bt, 3, 2, base * q5)
+                acc[packIndex(pt3, bt, 3, 2, pp, bp)] += base * q5
               }
-            })
+            }
           } else if (bt <= 5) {
-            each((b3, q5) => settle(pt, (bt + b3) % 10, 2, 3, base * q5))
+            for (let b3 = 0; b3 <= 9; b3++) {
+              if (vc[b3] === 0) continue
+              acc[packIndex(pt, (bt + b3) % 10, 2, 3, pp, bp)] += base * (vc[b3] / rem3)
+            }
           } else {
-            settle(pt, bt, 2, 2, base)
+            acc[packIndex(pt, bt, 2, 2, pp, bp)] += base
           }
         }),
       ),
     ),
   )
 
-  return [...acc.values()]
+  const buckets: OutcomeBucket[] = []
+  for (let pT = 0; pT <= 9; pT++)
+    for (let bT = 0; bT <= 9; bT++)
+      for (let pC = 2; pC <= 3; pC++)
+        for (let bC = 2; bC <= 3; bC++)
+          for (let pp = 0; pp <= 1; pp++)
+            for (let bp = 0; bp <= 1; bp++) {
+              const prob = acc[packIndex(pT, bT, pC, bC, pp, bp)]
+              if (prob <= 0) continue
+              buckets.push({
+                winner: pT > bT ? 'P' : bT > pT ? 'B' : 'T',
+                pTotal: pT,
+                bTotal: bT,
+                pCards: (pC === 2 ? 2 : 3) as 2 | 3,
+                bCards: (bC === 2 ? 2 : 3) as 2 | 3,
+                pPair: pp === 1,
+                bPair: bp === 1,
+                prob,
+              })
+            }
+  return buckets
 }
 
 let cachedTable: OutcomeBucket[] | null = null
@@ -102,6 +151,9 @@ export interface TheoreticalStats {
   pDragon7: number
   /** パンダ8(プレイヤー3枚合計8勝ち) */
   pPanda8: number
+  /** プレイヤーペア(=バンカーペアと同値) */
+  pPlayerPair: number
+  pEitherPair: number
   /** EZバンカー(D7プッシュ)の控除率 */
   edgeBankerEZ: number
   edgePlayer: number
@@ -120,16 +172,20 @@ export function getTheoreticalStats(): TheoreticalStats {
   let pT = 0
   let pD7 = 0
   let pP8 = 0
+  let pPP = 0
+  let pEP = 0
   for (const b of table) {
     if (b.winner === 'B') {
       pB += b.prob
-      if (b.wTotal === 7 && b.wCards === 3) pD7 += b.prob
+      if (b.bTotal === 7 && b.bCards === 3) pD7 += b.prob
     } else if (b.winner === 'P') {
       pP += b.prob
-      if (b.wTotal === 8 && b.wCards === 3) pP8 += b.prob
+      if (b.pTotal === 8 && b.pCards === 3) pP8 += b.prob
     } else {
       pT += b.prob
     }
+    if (b.pPair) pPP += b.prob
+    if (b.pPair || b.bPair) pEP += b.prob
   }
   cachedStats = {
     pBanker: pB,
@@ -137,6 +193,8 @@ export function getTheoreticalStats(): TheoreticalStats {
     pTie: pT,
     pDragon7: pD7,
     pPanda8: pP8,
+    pPlayerPair: pPP,
+    pEitherPair: pEP,
     // EZバンカー: D7でプッシュ、タイでプッシュ → EV = (pB - pD7) - pP
     edgeBankerEZ: pP - (pB - pD7),
     edgePlayer: pB - pP,
@@ -145,4 +203,16 @@ export function getTheoreticalStats(): TheoreticalStats {
     edgeDragon7: 1 - pD7 - 40 * pD7,
   }
   return cachedStats
+}
+
+/** 本線ベットの控除率(配当ルールから動的算出) */
+export function mainBetEdges(rules: MainBetRules): { banker: number; player: number; tie: number } {
+  const t = getTheoreticalStats()
+  const banker =
+    rules.bankerRule === 'ez'
+      ? t.pPlayer - (t.pBanker - t.pDragon7) * rules.bankerPayout
+      : t.pPlayer - t.pBanker * rules.bankerPayout
+  const player = t.pBanker - t.pPlayer * rules.playerPayout
+  const tie = 1 - t.pTie - rules.tiePayout * t.pTie
+  return { banker, player, tie }
 }

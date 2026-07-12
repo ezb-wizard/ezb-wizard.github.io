@@ -14,7 +14,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
-        className="flex max-h-[88dvh] w-full max-w-md flex-col rounded-t-2xl border-t border-felt-700 bg-felt-900 pb-[env(safe-area-inset-bottom)]"
+        className="flex max-h-[88dvh] w-full max-w-md flex-col rounded-t-2xl border-t border-gold-600/40 bg-base-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3">
@@ -30,7 +30,7 @@ export function Modal({
           )}
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-4">{children}</div>
-        {footer && <div className="border-t border-felt-700 px-4 py-3">{footer}</div>}
+        {footer && <div className="border-t border-base-700 px-4 py-3">{footer}</div>}
       </div>
     </div>
   )
@@ -60,7 +60,7 @@ export function NumInput({
       type="text"
       inputMode="numeric"
       disabled={disabled}
-      className={`num h-12 w-full rounded-lg border border-felt-700 bg-felt-950 px-3 text-right text-ink placeholder:text-ink-3 focus:border-gold-500 focus:outline-none disabled:opacity-40 ${className}`}
+      className={`num h-12 w-full rounded-lg border border-base-700 bg-base-950 px-3 text-right text-ink placeholder:text-ink-3 focus:border-gold-500 focus:outline-none disabled:opacity-40 ${className}`}
       value={text}
       placeholder={placeholder}
       onChange={(e) => {
@@ -101,7 +101,7 @@ export function DecInput({
     <input
       type="text"
       inputMode="decimal"
-      className={`num h-12 w-full rounded-lg border border-felt-700 bg-felt-950 px-3 text-right text-ink placeholder:text-ink-3 focus:border-gold-500 focus:outline-none ${className}`}
+      className={`num h-12 w-full rounded-lg border border-base-700 bg-base-950 px-3 text-right text-ink placeholder:text-ink-3 focus:border-gold-500 focus:outline-none ${className}`}
       value={text}
       placeholder={placeholder}
       onChange={(e) => {
@@ -126,12 +126,12 @@ export function Seg<T extends string | number>({
   className?: string
 }) {
   return (
-    <div className={`flex overflow-hidden rounded-lg border border-felt-700 ${className}`}>
+    <div className={`flex overflow-hidden rounded-lg border border-base-700 ${className}`}>
       {options.map((o) => (
         <button
           key={String(o.value)}
-          className={`h-12 flex-1 text-sm font-bold ${
-            o.value === value ? 'bg-gold-500 text-felt-950' : 'bg-felt-900 text-ink-2'
+          className={`press h-12 flex-1 text-sm font-bold ${
+            o.value === value ? 'btn-gold' : 'bg-base-900 text-ink-2'
           }`}
           onClick={() => onChange(o.value)}
         >
@@ -164,7 +164,7 @@ export function PrimaryBtn({
 }) {
   return (
     <button
-      className={`h-14 w-full rounded-xl bg-gold-500 text-base font-bold text-felt-950 active:bg-gold-600 disabled:opacity-40 ${className}`}
+      className={`btn-gold press h-14 w-full rounded-xl text-base font-bold disabled:opacity-40 ${className}`}
       onClick={onClick}
       disabled={disabled}
     >
@@ -184,7 +184,7 @@ export function GhostBtn({
 }) {
   return (
     <button
-      className={`h-12 w-full rounded-lg border border-felt-700 text-sm font-bold text-ink-2 active:bg-felt-800 ${className}`}
+      className={`press h-12 w-full rounded-lg border border-gold-600/30 text-sm font-bold text-ink-2 active:bg-base-800 ${className}`}
       onClick={onClick}
     >
       {children}
@@ -208,7 +208,7 @@ export function Confirm({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-felt-700 bg-felt-900 p-5">
+      <div className="card-luxe w-full max-w-sm bg-base-900/90 p-5">
         <p className="text-base font-bold">{message}</p>
         {detail && <p className="mt-2 text-sm text-ink-2">{detail}</p>}
         <div className="mt-5 flex gap-3">

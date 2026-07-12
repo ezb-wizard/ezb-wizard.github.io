@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../store'
 import { getOutcomeTable } from '../lib/baccarat'
-import { presetSideBets } from '../lib/sidebets'
+import { casinoConfig } from '../lib/casinos'
+import { sessionRules } from '../types'
 import {
   STRATEGY_NAMES,
   type SimDone,
@@ -16,14 +17,14 @@ import { Field, NumInput, PrimaryBtn, Seg } from './ui'
 /** 戦略シミュレーター(実プレイと分離した教育用タブ) */
 export default function SimScreen() {
   const { session, settings } = useApp()
-  const config = session ?? null
-  const availableSides = (config?.sideBets ?? presetSideBets()).filter((d) => d.enabled)
+  const mainBets = session ? sessionRules(session) : casinoConfig(settings).mainBets
+  const availableSides = (session?.sideBets ?? casinoConfig(settings).sideBets).filter((d) => d.enabled)
 
   const [strategy, setStrategy] = useState<StrategyId>('flat')
   const [side, setSide] = useState<'B' | 'P'>('B')
   const [startKrw, setStartKrw] = useState<number | null>(1_000_000)
   const [baseBet, setBaseBet] = useState<number | null>(settings.chipUnit)
-  const [tableMax, setTableMax] = useState<number | null>(config?.tableMax ?? 1_000_000)
+  const [tableMax, setTableMax] = useState<number | null>(session?.tableMax ?? 1_000_000)
   const [handsPerRun, setHandsPerRun] = useState<number | null>(100)
   const [runs, setRuns] = useState<number | null>(10_000)
   const [sideAmounts, setSideAmounts] = useState<Record<string, number>>({})
@@ -61,16 +62,11 @@ export default function SimScreen() {
       tableMax: tableMax!,
       strategy,
       side,
-      tiePayout: config?.tiePayout ?? 8,
+      mainBets,
       sideBets: availableSides
         .filter((d) => (sideAmounts[d.id] ?? 0) > 0)
         .map((d) => ({ def: d, amount: sideAmounts[d.id] })),
-      outcomes: getOutcomeTable().map((b) => ({
-        winner: b.winner,
-        wTotal: b.wTotal,
-        wCards: b.wCards,
-        prob: b.prob,
-      })),
+      outcomes: getOutcomeTable(),
     }
     worker.onmessage = (e: MessageEvent<SimMessage>) => {
       if (e.data.type === 'progress') setProgress(e.data.done / e.data.total)
@@ -85,14 +81,14 @@ export default function SimScreen() {
 
   return (
     <div className="space-y-4 p-3 pb-8">
-      <div className="rounded-lg bg-felt-900 p-3 text-[11px] leading-relaxed text-ink-2">
+      <div className="card-luxe p-3 text-[11px] leading-relaxed text-ink-2">
         ここは<b className="text-ink">教育用シミュレーター</b>です。どのベット法も期待値(控除率)は変えられません。
         破産リスクと収支のばらつきがどう変わるかを確認するためのツールです。
       </div>
 
       <Field label="戦略">
         <select
-          className="h-12 w-full rounded-lg border border-felt-700 bg-felt-950 px-3 text-ink focus:border-gold-500 focus:outline-none"
+          className="h-12 w-full rounded-lg border border-base-700 bg-base-950 px-3 text-ink focus:border-gold-500 focus:outline-none"
           value={strategy}
           onChange={(e) => setStrategy(e.target.value as StrategyId)}
         >
@@ -155,7 +151,7 @@ export default function SimScreen() {
         {progress != null ? `計算中… ${Math.round(progress * 100)}%` : 'シミュレーション実行'}
       </PrimaryBtn>
       {progress != null && (
-        <div className="h-2 overflow-hidden rounded-full bg-felt-800">
+        <div className="h-2 overflow-hidden rounded-full bg-base-800">
           <div className="h-full bg-gold-500 transition-all" style={{ width: `${progress * 100}%` }} />
         </div>
       )}
@@ -170,12 +166,12 @@ function SimResults({ result, runs }: { result: SimDone; runs: number }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <ResultCard label="破産確率(必要ベット不能)">
-          <span className={`num text-xl font-bold ${result.ruinRate > 0.1 ? 'text-banker' : ''}`}>
+          <span className={`num text-xl font-bold ${result.ruinRate > 0.1 ? 'text-lose' : ''}`}>
             {fmtPct(result.ruinRate)}
           </span>
         </ResultCard>
         <ResultCard label="期待収支(平均)">
-          <span className={`num text-xl font-bold ${result.meanNet < 0 ? 'text-banker' : 'text-tie'}`}>
+          <span className={`num text-xl font-bold ${result.meanNet < 0 ? 'text-lose' : 'text-win'}`}>
             {fmtSigned(result.meanNet)}
           </span>
         </ResultCard>
@@ -186,16 +182,16 @@ function SimResults({ result, runs }: { result: SimDone; runs: number }) {
           </span>
         </ResultCard>
         <ResultCard label="最大DD 平均 / 95%">
-          <span className="num text-sm font-bold text-banker">-{fmtKrw(result.meanMaxDD)}</span>
+          <span className="num text-sm font-bold text-lose">-{fmtKrw(result.meanMaxDD)}</span>
           <span className="num block text-[10px] text-ink-2">95%: -{fmtKrw(result.ddP95)}</span>
         </ResultCard>
       </div>
 
-      <div className="rounded-xl border border-felt-700 bg-felt-900 p-3">
+      <div className="card-luxe p-3">
         <h3 className="mb-1 text-xs font-bold text-gold-300">最終収支の分布({runs.toLocaleString()}試行)</h3>
         <HistChart hist={result.netHist} xFmt={(v) => fmtKrw(v)} />
       </div>
-      <div className="rounded-xl border border-felt-700 bg-felt-900 p-3">
+      <div className="card-luxe p-3">
         <h3 className="mb-1 text-xs font-bold text-gold-300">最大ドローダウンの分布</h3>
         <HistChart hist={result.ddHist} xFmt={(v) => fmtKrw(v)} />
       </div>
@@ -209,7 +205,7 @@ function SimResults({ result, runs }: { result: SimDone; runs: number }) {
 
 function ResultCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-felt-700 bg-felt-900 p-2.5">
+    <div className="card-luxe p-2.5">
       <div className="text-[10px] text-ink-3">{label}</div>
       {children}
     </div>

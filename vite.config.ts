@@ -12,20 +12,20 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
-        name: 'EZバカラ 記録・資金管理',
-        short_name: 'EZバカラ',
+        name: 'EZ Baccarat Wizard',
+        short_name: 'EZB Wizard',
         description: 'EZバカラ専用セッション記録・資金管理アプリ(完全ローカル)',
         lang: 'ja',
-        theme_color: '#0B3D2E',
-        background_color: '#06231A',
+        theme_color: '#0B0F14',
+        background_color: '#0B0F14',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

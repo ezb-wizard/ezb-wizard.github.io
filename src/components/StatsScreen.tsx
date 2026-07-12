@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { useApp } from '../store'
-import type { Hand, Session } from '../types'
+import { sessionRules, type Hand, type Session } from '../types'
 import { getTheoreticalStats } from '../lib/baccarat'
-import { presetSideBets, sideBetStats } from '../lib/sidebets'
-import { matchRule, settleBet } from '../lib/settle'
+import { sideBetStats } from '../lib/sidebets'
+import { matchRule, possibleMatch, settleBet } from '../lib/settle'
 import { fmtJpy, fmtKrw, fmtPct, fmtSigned, krwToJpy } from '../lib/money'
 import { LineChart } from './charts'
 import BigRoad from './BigRoad'
@@ -83,13 +83,13 @@ export default function StatsScreen() {
       </Section>
 
       <Section title="セッション一覧">
-        <div className="divide-y divide-felt-800 rounded-lg border border-felt-700">
+        <div className="card-luxe divide-y divide-base-800 overflow-hidden">
           {sessions.map((s) => {
             const pl = s.endKrw != null ? s.endKrw - s.startKrw : null
             return (
               <button
                 key={s.id}
-                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left ${sel === s.id ? 'bg-felt-800' : ''}`}
+                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left ${sel === s.id ? 'bg-base-800' : ''}`}
                 onClick={() => setSelRaw(s.id!)}
               >
                 <div className="flex-1">
@@ -101,7 +101,7 @@ export default function StatsScreen() {
                     {s.handCount ?? '—'}ハンド / 開始{fmtKrw(s.startKrw)}
                   </div>
                 </div>
-                <span className={`num text-sm font-bold ${pl == null ? 'text-ink-3' : pl > 0 ? 'text-tie' : pl < 0 ? 'text-banker' : ''}`}>
+                <span className={`num text-sm font-bold ${pl == null ? 'text-ink-3' : pl > 0 ? 'text-win' : pl < 0 ? 'text-lose' : ''}`}>
                   {pl == null ? '—' : fmtSigned(pl)}
                 </span>
               </button>
@@ -117,7 +117,7 @@ function ScopeChip({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       className={`h-10 shrink-0 rounded-full border px-4 text-xs font-bold ${
-        active ? 'border-gold-500 bg-gold-500 text-felt-950' : 'border-felt-700 bg-felt-900 text-ink-2'
+        active ? 'border-gold-500 bg-gold-500 text-base-950' : 'border-base-700 bg-base-900 text-ink-2'
       }`}
       onClick={onClick}
     >
@@ -128,7 +128,7 @@ function ScopeChip({ label, active, onClick }: { label: string; active: boolean;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-felt-700 bg-felt-900 p-3">
+    <section className="card-luxe p-3">
       <h2 className="mb-2 text-xs font-bold text-gold-300">{title}</h2>
       {children}
     </section>
@@ -179,7 +179,7 @@ function SummaryCards({
   return (
     <div className="grid grid-cols-2 gap-2">
       <Card label={sel === 'all' ? '総収支' : 'セッション収支'}>
-        <span className={`num text-lg font-bold ${net > 0 ? 'text-tie' : net < 0 ? 'text-banker' : ''}`}>
+        <span className={`num text-lg font-bold ${net > 0 ? 'text-win' : net < 0 ? 'text-lose' : ''}`}>
           {fmtSigned(net)}
         </span>
         <span className="num block text-[10px] text-ink-2">
@@ -196,7 +196,7 @@ function SummaryCards({
         <span className="num text-lg font-bold">{fmtKrw(avgBet)}</span>
       </Card>
       <Card label="最大ドローダウン">
-        <span className="num text-lg font-bold text-banker">{maxDD > 0 ? `-${fmtKrw(maxDD)}` : '—'}</span>
+        <span className="num text-lg font-bold text-lose">{maxDD > 0 ? `-${fmtKrw(maxDD)}` : '—'}</span>
       </Card>
     </div>
   )
@@ -204,7 +204,7 @@ function SummaryCards({
 
 function Card({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-felt-700 bg-felt-900 p-2.5">
+    <div className="card-luxe p-2.5">
       <div className="text-[10px] text-ink-3">{label}</div>
       {children}
     </div>
@@ -218,7 +218,7 @@ function PerTargetTable({ hands, sessionById }: { hands: Hand[]; sessionById: Ma
     for (const h of hands) {
       const s = sessionById.get(h.sessionId)
       if (!s) continue
-      const ctx = { tiePayout: s.tiePayout, sideBets: s.sideBets }
+      const ctx = { mainBets: sessionRules(s), sideBets: s.sideBets }
       for (const b of h.bets) {
         if (b.amount <= 0) continue
         let net: number
@@ -262,7 +262,7 @@ function PerTargetTable({ hands, sessionById }: { hands: Hand[]; sessionById: Ma
       </thead>
       <tbody>
         {rows.map((r) => (
-          <tr key={r.name} className="border-t border-felt-800">
+          <tr key={r.name} className="border-t border-base-800">
             <td className="py-1.5">{r.name}</td>
             <td className="num py-1.5 text-right">{r.n}</td>
             <td className="num py-1.5 text-right">
@@ -271,7 +271,7 @@ function PerTargetTable({ hands, sessionById }: { hands: Hand[]; sessionById: Ma
             <td className="num py-1.5 text-right">
               {r.n - r.push > 0 ? fmtPct(r.win / (r.n - r.push), 1) : '—'}
             </td>
-            <td className={`num py-1.5 text-right font-bold ${r.net > 0 ? 'text-tie' : r.net < 0 ? 'text-banker' : ''}`}>
+            <td className={`num py-1.5 text-right font-bold ${r.net > 0 ? 'text-win' : r.net < 0 ? 'text-lose' : ''}`}>
               {fmtSigned(r.net)}
             </td>
           </tr>
@@ -306,9 +306,9 @@ function BankrollSection({
   const fmt = ccy === 'jpy' && rate ? (v: number) => fmtJpy(v) : (v: number) => fmtKrw(v)
 
   const refLines = [
-    { y: conv(session.startKrw), label: '開始', color: '#9db4aa' },
-    ...(session.stopLossKrw != null ? [{ y: conv(session.stopLossKrw), label: 'SL', color: '#e2685f' }] : []),
-    ...(session.takeProfitKrw != null ? [{ y: conv(session.takeProfitKrw), label: 'TP', color: '#35a366' }] : []),
+    { y: conv(session.startKrw), label: '開始', color: '#93a1b3' },
+    ...(session.stopLossKrw != null ? [{ y: conv(session.stopLossKrw), label: 'SL', color: '#e5484d' }] : []),
+    ...(session.takeProfitKrw != null ? [{ y: conv(session.takeProfitKrw), label: 'TP', color: '#2ecc8f' }] : []),
   ]
 
   return (
@@ -337,18 +337,19 @@ function BankrollSection({
 /** 実績と理論値の乖離+収束チャート */
 function TheoryComparison({ hands, config }: { hands: Hand[]; config: Session | null }) {
   const t = getTheoreticalStats()
-  const sideDefs = (config?.sideBets ?? presetSideBets()).filter((d) => d.enabled)
+  const sideDefs = (config?.sideBets ?? []).filter((d) => d.enabled)
 
+  // 'hit'=成立 / 'miss'=不成立確定 / 'unknown'=入力省略により判定不能(集計から除外)
   const metrics = useMemo(
     () => [
-      { id: 'B', name: 'バンカー', theory: t.pBanker, test: (h: Hand) => h.winner === 'B' },
-      { id: 'P', name: 'プレイヤー', theory: t.pPlayer, test: (h: Hand) => h.winner === 'P' },
-      { id: 'T', name: 'タイ', theory: t.pTie, test: (h: Hand) => h.winner === 'T' },
+      { id: 'B', name: 'バンカー', theory: t.pBanker, test: (h: Hand) => (h.winner === 'B' ? 'hit' : 'miss') },
+      { id: 'P', name: 'プレイヤー', theory: t.pPlayer, test: (h: Hand) => (h.winner === 'P' ? 'hit' : 'miss') },
+      { id: 'T', name: 'タイ', theory: t.pTie, test: (h: Hand) => (h.winner === 'T' ? 'hit' : 'miss') },
       ...sideDefs.map((d) => ({
         id: d.id,
         name: d.name,
         theory: sideBetStats(d).winProb,
-        test: (h: Hand) => matchRule(d, h) != null,
+        test: (h: Hand) => (matchRule(d, h) != null ? 'hit' : possibleMatch(d, h) ? 'unknown' : 'miss'),
       })),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,9 +364,13 @@ function TheoryComparison({ hands, config }: { hands: Hand[]; config: Session | 
     const step = Math.max(1, Math.ceil(hands.length / 300))
     const pts: { x: number; y: number }[] = []
     let hits = 0
+    let decidable = 0
     hands.forEach((h, i) => {
-      if (metric.test(h)) hits++
-      if ((i + 1) % step === 0 || i === hands.length - 1) pts.push({ x: i + 1, y: (hits / (i + 1)) * 100 })
+      const r = metric.test(h)
+      if (r !== 'unknown') decidable++
+      if (r === 'hit') hits++
+      if (((i + 1) % step === 0 || i === hands.length - 1) && decidable > 0)
+        pts.push({ x: i + 1, y: (hits / decidable) * 100 })
     })
     return pts
   }, [hands, metric])
@@ -383,11 +388,13 @@ function TheoryComparison({ hands, config }: { hands: Hand[]; config: Session | 
         </thead>
         <tbody>
           {metrics.map((m) => {
-            const hits = hands.filter(m.test).length
-            const obs = hands.length > 0 ? hits / hands.length : null
+            const results = hands.map(m.test)
+            const hits = results.filter((r) => r === 'hit').length
+            const decidable = results.filter((r) => r !== 'unknown').length
+            const obs = decidable > 0 ? hits / decidable : null
             const dev = obs != null ? obs - m.theory : null
             return (
-              <tr key={m.id} className="border-t border-felt-800">
+              <tr key={m.id} className="border-t border-base-800">
                 <td className="py-1.5">{m.name}</td>
                 <td className="num py-1.5 text-right">
                   {obs != null ? `${fmtPct(obs)} (${hits})` : '—'}
@@ -408,7 +415,7 @@ function TheoryComparison({ hands, config }: { hands: Hand[]; config: Session | 
             <button
               key={m.id}
               className={`h-9 shrink-0 rounded-full border px-3 text-[11px] font-bold ${
-                metric.id === m.id ? 'border-gold-500 bg-gold-500 text-felt-950' : 'border-felt-700 text-ink-2'
+                metric.id === m.id ? 'border-gold-500 bg-gold-500 text-base-950' : 'border-base-700 text-ink-2'
               }`}
               onClick={() => setMetricId(m.id)}
             >
@@ -425,6 +432,7 @@ function TheoryComparison({ hands, config }: { hands: Hand[]; config: Session | 
         />
         <p className="mt-1 text-[10px] leading-relaxed text-ink-3">
           試行回数が増えるほど実績は理論値に収束します。乖離は偶然の揺らぎであり、次のハンドの予測には使えません(独立試行)。
+          サイドベットの実績は、入力を省略して判定できないハンドを除いて集計しています。
         </p>
       </div>
     </div>

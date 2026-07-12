@@ -1,10 +1,10 @@
-import type { SideBetDef } from '../types'
+import type { HandInput, SideBetDef } from '../types'
 import { getOutcomeTable, type OutcomeBucket } from './baccarat'
 import { matchRule } from './settle'
 
 /**
- * プリセットサイドベット。配当はカジノごとに異なるためテーブル設定で変更可能。
- * デフォルト有効:D7・バンカー6・プレイヤー7(仕様どおりパンダ8はOFF)
+ * EZバカラ標準のサイドベットプリセット(旧バージョンのデフォルト構成)。
+ * カジノ別プリセットは lib/casinos.ts を参照。
  */
 export function presetSideBets(): SideBetDef[] {
   return [
@@ -43,23 +43,21 @@ export function presetSideBets(): SideBetDef[] {
       enabled: false,
       preset: true,
     },
-    {
-      id: 'SMALL_TIGER',
-      name: 'スモールタイガー',
-      side: 'B',
-      rules: [{ totals: [6], cards: '2', payout: 22 }],
-      enabled: false,
-      preset: true,
-    },
-    {
-      id: 'BIG_TIGER',
-      name: 'ビッグタイガー',
-      side: 'B',
-      rules: [{ totals: [6], cards: '3', payout: 50 }],
-      enabled: false,
-      preset: true,
-    },
   ]
+}
+
+/** 確率テーブルのバケットを精算判定用の HandInput に変換 */
+export function bucketToHand(b: OutcomeBucket): HandInput {
+  const winnerIsB = b.winner === 'B'
+  return {
+    winner: b.winner,
+    winnerTotal: winnerIsB ? b.bTotal : b.pTotal,
+    winnerCards: winnerIsB ? b.bCards : b.pCards,
+    loserTotal: winnerIsB ? b.pTotal : b.bTotal,
+    loserCards: winnerIsB ? b.pCards : b.bCards,
+    pPair: b.pPair,
+    bPair: b.bPair,
+  }
 }
 
 export interface SideBetStats {
@@ -79,11 +77,7 @@ export function sideBetStats(def: SideBetDef, table: OutcomeBucket[] = getOutcom
   let winProb = 0
   let ev = 0
   for (const b of table) {
-    const rule = matchRule(def, {
-      winner: b.winner,
-      winnerTotal: b.wTotal,
-      winnerCards: b.wCards,
-    })
+    const rule = matchRule(def, bucketToHand(b))
     if (rule) {
       winProb += b.prob
       ev += b.prob * rule.payout

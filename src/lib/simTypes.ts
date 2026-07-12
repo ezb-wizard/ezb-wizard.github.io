@@ -1,12 +1,8 @@
-import type { SideBetDef, Winner } from '../types'
+import type { MainBetRules, SideBetDef } from '../types'
+import type { OutcomeBucket } from './baccarat'
 
-/** シミュレーション用の結果分布(8デッキ完全列挙テーブルを圧縮したもの) */
-export interface SimOutcome {
-  winner: Winner
-  wTotal: number
-  wCards: 2 | 3
-  prob: number
-}
+/** シミュレーション用の結果分布(8デッキ完全列挙テーブルそのもの) */
+export type SimOutcome = OutcomeBucket
 
 export type StrategyId =
   | 'flat'
@@ -36,7 +32,7 @@ export interface SimRequest {
   strategy: StrategyId
   /** 本線ベット対象 */
   side: 'B' | 'P'
-  tiePayout: 8 | 9
+  mainBets: MainBetRules
   /** 毎ハンド定額購入するサイドベット */
   sideBets: { def: SideBetDef; amount: number }[]
   outcomes: SimOutcome[]

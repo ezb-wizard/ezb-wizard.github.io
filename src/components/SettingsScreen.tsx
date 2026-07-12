@@ -12,6 +12,34 @@ export default function SettingsScreen() {
   return (
     <div className="space-y-5 p-4 pb-8">
       <section className="space-y-3">
+        <h2 className="text-sm font-bold text-gold-300">カジノ</h2>
+        <Seg
+          options={[
+            { value: 'PARADISE', label: 'PARADISE 仁川' },
+            { value: 'INSPIRE', label: 'INSPIRE 仁川' },
+          ]}
+          value={settings.casino ?? 'PARADISE'}
+          onChange={(v) => void updateSettings({ casino: v })}
+        />
+        <p className="text-[10px] leading-relaxed text-ink-3">
+          カジノごとに配当プリセットと有効サイドベットが切り替わります。配当の編集はセッション開始画面で行い、
+          「このカジノの既定として保存」で永続化されます。過去セッションの損益は開始時のスナップショットで
+          計算されるため、設定を変えても変わりません。
+        </p>
+        {settings.casinoCustom?.[settings.casino ?? 'PARADISE'] && (
+          <GhostBtn
+            onClick={() =>
+              void updateSettings({
+                casinoCustom: { ...(settings.casinoCustom ?? {}), [settings.casino ?? 'PARADISE']: undefined },
+              })
+            }
+          >
+            このカジノのカスタム配当をプリセットに戻す
+          </GhostBtn>
+        )}
+      </section>
+
+      <section className="space-y-3">
         <h2 className="text-sm font-bold text-gold-300">資金管理</h2>
         <Field label={`推奨ベット率:資金の ${settings.betPct}%(1〜3%)`}>
           <input
@@ -40,7 +68,7 @@ export default function SettingsScreen() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-gold-300">為替レート(JPY/KRW)</h2>
-        <div className="rounded-lg border border-felt-700 bg-felt-900 p-3 text-sm">
+        <div className="card-luxe p-3 text-sm">
           {rate ? (
             <>
               <div className="num font-bold">¥1 = ₩{rate.rate.toFixed(4)}</div>
@@ -65,7 +93,7 @@ export default function SettingsScreen() {
           <div className="flex items-center gap-2">
             <DecInput value={manualRate} onChange={setManualRate} placeholder="例: 9.15" />
             <button
-              className="h-12 shrink-0 rounded-lg bg-gold-500 px-4 text-sm font-bold text-felt-950 disabled:opacity-40"
+              className="h-12 shrink-0 rounded-lg bg-gold-500 px-4 text-sm font-bold text-base-950 disabled:opacity-40"
               disabled={manualRate == null || manualRate <= 0}
               onClick={() =>
                 void updateSettings({ manualRate, manualRateTs: Date.now(), manualRateFixed: true })
@@ -97,7 +125,7 @@ export default function SettingsScreen() {
         <section className="space-y-2">
           <h2 className="text-sm font-bold text-gold-300">保存済みテーブル設定</h2>
           {settings.savedTables.map((t) => (
-            <div key={t.name} className="flex items-center justify-between rounded-lg border border-felt-700 bg-felt-900 px-3 py-2">
+            <div key={t.name} className="flex items-center justify-between card-luxe px-3 py-2">
               <div>
                 <div className="text-xs font-bold">{t.name}</div>
                 <div className="num text-[10px] text-ink-3">
@@ -119,7 +147,7 @@ export default function SettingsScreen() {
         </section>
       )}
 
-      <section className="rounded-lg bg-felt-900 p-3 text-[10px] leading-relaxed text-ink-3">
+      <section className="card-luxe p-3 text-[10px] leading-relaxed text-ink-3">
         <p>
           EZバカラ記録・資金管理(個人利用)。本アプリは記録・資金管理・理論値の可視化のみを目的とし、
           結果の予測や勝利を保証する機能は一切ありません。バカラの各ハンドは独立試行であり、控除率は固定です。

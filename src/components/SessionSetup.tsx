@@ -1,48 +1,57 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { db } from '../lib/db'
-import { presetSideBets } from '../lib/sidebets'
-import type { SideBetDef, TableConfig } from '../types'
-import { fmtBoth } from '../lib/money'
+import { casinoConfig, casinoPreset, CASINO_NAMES } from '../lib/casinos'
+import { mainBetEdges } from '../lib/baccarat'
+import type { MainBetRules, SideBetDef, StartInput } from '../types'
+import { fmtBoth, fmtDateTime, fmtKrw, fmtPct } from '../lib/money'
 import SideBetEditor from './SideBetEditor'
-import { Field, NumInput, PrimaryBtn, Seg } from './ui'
+import { DecInput, Field, GhostBtn, NumInput, PrimaryBtn, Seg } from './ui'
 
 type LimitMode = 'off' | 'amount' | 'pct'
 
 export default function SessionSetup() {
   const { startSession, rate, settings, updateSettings } = useApp()
+  const casino = settings.casino ?? 'PARADISE'
 
-  const [startKrw, setStartKrw] = useState<number | null>(1_000_000)
+  const [startCcy, setStartCcy] = useState<'KRW' | 'JPY'>('KRW')
+  const [startAmount, setStartAmount] = useState<number | null>(1_000_000)
   const [tableMin, setTableMin] = useState<number | null>(10_000)
   const [tableMax, setTableMax] = useState<number | null>(1_000_000)
-  const [tiePayout, setTiePayout] = useState<8 | 9>(8)
-  const [sideBets, setSideBets] = useState<SideBetDef[]>(presetSideBets())
+  const [mainBets, setMainBets] = useState<MainBetRules>(() => casinoConfig(settings).mainBets)
+  const [sideBets, setSideBets] = useState<SideBetDef[]>(() => casinoConfig(settings).sideBets)
   const [slMode, setSlMode] = useState<LimitMode>('pct')
   const [slValue, setSlValue] = useState<number | null>(50)
   const [tpMode, setTpMode] = useState<LimitMode>('off')
   const [tpValue, setTpValue] = useState<number | null>(null)
-  const [tableName, setTableName] = useState('')
-  const [showSave, setShowSave] = useState(false)
+  const [savedNote, setSavedNote] = useState(false)
 
-  // 前回セッションの設定を初期値に
+  // カジノ切替で配当構成を読み直す(カスタム永続値 > プリセット)
+  useEffect(() => {
+    const c = casinoConfig(settings, casino)
+    setMainBets(c.mainBets)
+    setSideBets(c.sideBets)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [casino])
+
+  // 前回セッションから金額系のみ初期値に
   useEffect(() => {
     void (async () => {
       const last = await db.sessions.orderBy('startedAt').last()
       if (!last) return
-      setStartKrw(last.startKrw)
+      setStartAmount(last.startKrw)
       setTableMin(last.tableMin)
       setTableMax(last.tableMax)
-      setTiePayout(last.tiePayout)
-      setSideBets(last.sideBets)
     })()
   }, [])
 
-  const applyTable = (t: TableConfig) => {
-    setTableMin(t.tableMin)
-    setTableMax(t.tableMax)
-    setTiePayout(t.tiePayout)
-    setSideBets(structuredClone(t.sideBets))
-  }
+  // JPY入力時はその日のレートでKRWへ自動換算
+  const startKrw =
+    startCcy === 'KRW'
+      ? startAmount
+      : startAmount != null && rate
+        ? Math.round(startAmount * rate.rate)
+        : null
 
   const stopLossKrw =
     slMode === 'off' || startKrw == null || slValue == null
@@ -57,6 +66,7 @@ export default function SessionSetup() {
         ? startKrw + tpValue
         : Math.round(startKrw * (1 + tpValue / 100))
 
+  const edges = mainBetEdges(mainBets)
   const valid =
     startKrw != null &&
     startKrw > 0 &&
@@ -67,43 +77,85 @@ export default function SessionSetup() {
 
   const start = () => {
     if (!valid) return
+    const startInput: StartInput = {
+      currency: startCcy,
+      amount: startAmount!,
+      rate: startCcy === 'JPY' ? (rate?.rate ?? null) : null,
+      rateTs: startCcy === 'JPY' ? (rate?.ts ?? null) : null,
+    }
     void startSession({
       startKrw: startKrw!,
       tableMin: tableMin!,
       tableMax: tableMax!,
-      tiePayout,
+      tiePayout: mainBets.tiePayout === 9 ? 9 : 8,
+      mainBets,
+      casino,
       sideBets,
       stopLossKrw,
       takeProfitKrw,
       rate: rate?.rate ?? null,
       rateTs: rate?.ts ?? null,
+      startInput,
     })
+  }
+
+  const saveAsCasinoDefault = () => {
+    void updateSettings({
+      casinoCustom: {
+        ...(settings.casinoCustom ?? {}),
+        [casino]: { mainBets: structuredClone(mainBets), sideBets: structuredClone(sideBets) },
+      },
+    })
+    setSavedNote(true)
+    setTimeout(() => setSavedNote(false), 2000)
   }
 
   return (
     <div className="space-y-4 p-4 pb-8">
-      <h1 className="text-lg font-bold text-gold-300">セッション開始</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-gold-grad font-display text-lg font-bold">セッション開始</h1>
+        <span className="rounded-full border border-gold-600/40 px-3 py-1 text-[11px] font-bold text-gold-300">
+          {CASINO_NAMES[casino]}
+        </span>
+      </div>
 
-      {settings.savedTables.length > 0 && (
-        <Field label="保存済みテーブルから読み込み">
-          <div className="flex flex-wrap gap-2">
-            {settings.savedTables.map((t) => (
-              <button
-                key={t.name}
-                className="h-12 rounded-lg border border-felt-700 bg-felt-900 px-4 text-sm font-bold text-ink-2 active:bg-felt-800"
-                onClick={() => applyTable(t)}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        </Field>
-      )}
-
-      <Field label="開始資金(KRW)">
-        <NumInput value={startKrw} onChange={setStartKrw} placeholder="1,000,000" />
-        {startKrw != null && rate && (
-          <span className="num mt-1 block text-right text-xs text-ink-2">{fmtBoth(startKrw, rate.rate)}</span>
+      <Field label="開始資金">
+        <div className="flex gap-2">
+          <Seg
+            className="w-28 shrink-0"
+            options={[
+              { value: 'KRW', label: '₩' },
+              { value: 'JPY', label: '¥' },
+            ]}
+            value={startCcy}
+            onChange={setStartCcy}
+          />
+          <NumInput
+            value={startAmount}
+            onChange={setStartAmount}
+            placeholder={startCcy === 'KRW' ? '1,000,000' : '100,000'}
+          />
+        </div>
+        {/* 換算プレビュー(リアルタイム) */}
+        {startCcy === 'JPY' &&
+          (rate ? (
+            <span className="num mt-1 block text-right text-xs text-ink-2">
+              {startAmount != null && (
+                <>
+                  ¥{startAmount.toLocaleString()} ≒ <b className="text-gold-300">{fmtKrw(startAmount * rate.rate)}</b>
+                  <br />
+                </>
+              )}
+              適用レート ¥1=₩{rate.rate.toFixed(2)}({fmtDateTime(rate.ts)} 時点
+              {rate.source === 'cache' ? '・キャッシュ' : rate.source === 'manual' ? '・手動' : ''})
+            </span>
+          ) : (
+            <span className="mt-1 block text-right text-xs font-bold text-lose">
+              レート未取得のためJPY入力を使えません(設定画面で手動レートを入力してください)
+            </span>
+          ))}
+        {startCcy === 'KRW' && startAmount != null && rate && (
+          <span className="num mt-1 block text-right text-xs text-ink-2">{fmtBoth(startAmount, rate.rate)}</span>
         )}
       </Field>
 
@@ -116,20 +168,79 @@ export default function SessionSetup() {
         </Field>
       </div>
 
-      <Field label="タイ配当">
-        <Seg
-          options={[
-            { value: 8, label: '8:1' },
-            { value: 9, label: '9:1' },
-          ]}
-          value={tiePayout}
-          onChange={setTiePayout}
-        />
+      <Field label={`本線配当(${CASINO_NAMES[casino]})`}>
+        <div className="card-luxe space-y-3 p-3">
+          <div>
+            <span className="mb-1 block text-[11px] text-ink-3">バンカー</span>
+            <Seg
+              options={[
+                { value: 'commission', label: 'コミッション式' },
+                { value: 'ez', label: 'EZノーコミッション' },
+              ]}
+              value={mainBets.bankerRule}
+              onChange={(v) =>
+                setMainBets((m) => ({ ...m, bankerRule: v, bankerPayout: v === 'ez' ? 1 : 0.95 }))
+              }
+            />
+            {mainBets.bankerRule === 'commission' ? (
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="text-xs text-ink-2">配当</span>
+                <DecInput
+                  className="!h-10 !w-24"
+                  value={mainBets.bankerPayout}
+                  onChange={(v) => setMainBets((m) => ({ ...m, bankerPayout: v ?? 0.95 }))}
+                />
+                <span className="text-xs text-ink-2">:1</span>
+              </div>
+            ) : (
+              <p className="mt-1 text-[10px] text-ink-3">1:1・ドラゴン7(バンカー3枚合計7勝ち)はプッシュ</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-20 text-xs text-ink-2">プレイヤー</span>
+            <DecInput
+              className="!h-10 !w-24"
+              value={mainBets.playerPayout}
+              onChange={(v) => setMainBets((m) => ({ ...m, playerPayout: v ?? 1 }))}
+            />
+            <span className="text-xs text-ink-2">:1</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-20 text-xs text-ink-2">タイ</span>
+            <Seg
+              className="flex-1"
+              options={[
+                { value: 8, label: '8:1' },
+                { value: 9, label: '9:1' },
+              ]}
+              value={mainBets.tiePayout as 8 | 9}
+              onChange={(v) => setMainBets((m) => ({ ...m, tiePayout: v }))}
+            />
+          </div>
+          <p className="num text-right text-[10px] text-ink-3">
+            控除率:B {fmtPct(edges.banker)} / P {fmtPct(edges.player)} / T {fmtPct(edges.tie)}
+          </p>
+        </div>
       </Field>
 
-      <Field label="サイドベット構成(配当はこのテーブルの値に変更)">
+      <Field label="サイドベット構成(配当はこの台の値に変更可)">
         <SideBetEditor defs={sideBets} onChange={setSideBets} />
       </Field>
+
+      <div className="flex gap-2">
+        <GhostBtn onClick={saveAsCasinoDefault}>
+          {savedNote ? '✓ 保存しました' : 'このカジノの既定として保存'}
+        </GhostBtn>
+        <GhostBtn
+          onClick={() => {
+            const p = casinoPreset(casino)
+            setMainBets(p.mainBets)
+            setSideBets(p.sideBets)
+          }}
+        >
+          プリセットに戻す
+        </GhostBtn>
+      </div>
 
       <LimitField
         label="ストップロス"
@@ -147,44 +258,6 @@ export default function SessionSetup() {
         onValue={setTpValue}
         resultText={takeProfitKrw != null ? `資金が ${fmtBoth(takeProfitKrw, rate?.rate ?? null)} 以上で通知` : null}
       />
-
-      <div>
-        {showSave ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="h-12 flex-1 rounded-lg border border-felt-700 bg-felt-950 px-3 text-ink focus:border-gold-500 focus:outline-none"
-              placeholder="テーブル名(例: パラダイス1番)"
-              value={tableName}
-              onChange={(e) => setTableName(e.target.value)}
-            />
-            <button
-              className="h-12 rounded-lg bg-gold-500 px-4 text-sm font-bold text-felt-950 disabled:opacity-40"
-              disabled={!tableName.trim() || !valid}
-              onClick={() => {
-                const t: TableConfig = {
-                  name: tableName.trim(),
-                  tableMin: tableMin!,
-                  tableMax: tableMax!,
-                  tiePayout,
-                  sideBets: structuredClone(sideBets),
-                }
-                void updateSettings({
-                  savedTables: [...settings.savedTables.filter((x) => x.name !== t.name), t],
-                })
-                setTableName('')
-                setShowSave(false)
-              }}
-            >
-              保存
-            </button>
-          </div>
-        ) : (
-          <button className="text-xs font-bold text-gold-400 underline" onClick={() => setShowSave(true)}>
-            この構成をテーブル設定として保存
-          </button>
-        )}
-      </div>
 
       <PrimaryBtn onClick={start} disabled={!valid}>
         セッション開始

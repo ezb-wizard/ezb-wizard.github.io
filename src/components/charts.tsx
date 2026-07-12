@@ -11,8 +11,8 @@ export interface RefLine {
   color?: string
 }
 
-const INK3 = '#7fa093'
-const GRID = '#1e5c48'
+const INK3 = '#78838f'
+const GRID = '#2a3a52'
 
 /** 単一系列の折れ線(タッチでクロスヘア+ツールチップ) */
 export function LineChart({
@@ -21,7 +21,7 @@ export function LineChart({
   xFmt = (x) => `#${x}`,
   refLines = [],
   height = 180,
-  color = '#c9a24b',
+  color = '#d4b45a',
 }: {
   points: Pt[]
   yFmt: (y: number) => string
@@ -120,7 +120,7 @@ export function LineChart({
       {hp && (
         <g>
           <line x1={sx(hp.x)} x2={sx(hp.x)} y1={PAD.t} y2={H - PAD.b} stroke={INK3} strokeWidth={1} />
-          <circle cx={sx(hp.x)} cy={sy(hp.y)} r={4.5} fill={color} stroke="#06231a" strokeWidth={2} />
+          <circle cx={sx(hp.x)} cy={sy(hp.y)} r={4.5} fill={color} stroke="#0b0f14" strokeWidth={2} />
           <Tooltip x={sx(hp.x)} y={PAD.t + 4} w={W} lines={[xFmt(hp.x), yFmt(hp.y)]} />
         </g>
       )}
@@ -133,7 +133,7 @@ function Tooltip({ x, y, w, lines }: { x: number; y: number; w: number; lines: s
   const bx = Math.min(Math.max(x + 8, 2), w - bw - 2)
   return (
     <g>
-      <rect x={bx} y={y} width={bw} height={14 + lines.length * 13} rx={4} fill="#06231a" stroke={GRID} />
+      <rect x={bx} y={y} width={bw} height={14 + lines.length * 13} rx={4} fill="#0b0f14" stroke={GRID} />
       {lines.map((l, i) => (
         <text key={i} x={bx + 7} y={y + 15 + i * 13} fontSize={10} fill="#f2efe6">
           {l}
@@ -183,7 +183,7 @@ export function HistChart({
             width={Math.max(1, bw - 2)}
             height={h}
             rx={2}
-            fill={hover === i ? '#d8b96a' : '#b58c3c'}
+            fill={hover === i ? '#f2d98d' : '#b58c3c'}
             onPointerEnter={() => setHover(i)}
             onPointerDown={() => setHover(i)}
           />

@@ -43,17 +43,23 @@ export async function exportCsv(): Promise<void> {
   const header = [
     'セッションID',
     'セッション開始',
+    'カジノ',
     'ハンド番号',
     '時刻',
     '勝者',
     '勝利合計値',
     '勝利枚数',
+    '負け側合計値',
+    '負け側枚数',
+    'Pペア',
+    'Bペア',
     'ベット内訳',
     '純損益KRW',
     '純損益JPY',
     '適用レート(KRW/JPY)',
     'レート取得時点',
   ]
+  const pairText = (v: boolean | null | undefined) => (v == null ? '' : v ? 'あり' : 'なし')
   const rows = hands.map((h: Hand) => {
     const s = sessions.get(h.sessionId)
     const rate = s?.rate ?? null
@@ -62,11 +68,16 @@ export async function exportCsv(): Promise<void> {
     return [
       String(h.sessionId),
       fmtTs(s?.startedAt),
+      s?.casino ?? '',
       String(h.seq),
       fmtTs(h.ts),
       h.winner,
       h.winnerTotal == null ? '' : String(h.winnerTotal),
       h.winnerCards == null ? '' : String(h.winnerCards),
+      h.loserTotal == null ? '' : String(h.loserTotal),
+      h.loserCards == null ? '' : String(h.loserCards),
+      pairText(h.pPair),
+      pairText(h.bPair),
       h.bets.map((b) => `${b.target}:${b.amount}`).join('; ') || '見',
       String(h.net),
       jpy == null ? '' : String(Math.round(jpy)),

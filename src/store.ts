@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   DEFAULT_SETTINGS,
+  sessionRules,
   type BetPlacement,
   type Hand,
   type HandInput,
@@ -41,7 +42,7 @@ interface AppState {
 }
 
 function settleCtx(session: Session): SettleContext {
-  return { tiePayout: session.tiePayout, sideBets: session.sideBets }
+  return { mainBets: sessionRules(session), sideBets: session.sideBets }
 }
 
 /** 現在資金 = 開始資金 + 全ハンド純損益 */

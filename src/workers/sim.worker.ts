@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { settleBet } from '../lib/settle'
+import { bucketToHand } from '../lib/sidebets'
 import type { HandInput } from '../types'
 import type { Histogram, SimDone, SimMessage, SimRequest, StrategyId } from '../lib/simTypes'
 
@@ -131,11 +132,10 @@ self.onmessage = (e: MessageEvent<SimRequest>) => {
       if (cum[mid] < u) lo = mid + 1
       else hi = mid
     }
-    const o = req.outcomes[lo]
-    return { winner: o.winner, winnerTotal: o.wTotal, winnerCards: o.wCards }
+    return bucketToHand(req.outcomes[lo])
   }
 
-  const ctx = { tiePayout: req.tiePayout, sideBets: req.sideBets.map((s) => s.def) }
+  const ctx = { mainBets: req.mainBets, sideBets: req.sideBets.map((s) => s.def) }
   const sideTotal = req.sideBets.reduce((s, b) => s + b.amount, 0)
 
   const finals: number[] = []
