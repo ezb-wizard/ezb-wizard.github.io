@@ -7,7 +7,7 @@ import BigRoad from './BigRoad'
 
 const RED = '#e5484d'
 const BLUE = '#4e97d6'
-const TIE = '#b58c3c'
+const TIE = '#35a366'
 const GRID = '#2a3a52'
 
 function ScrollGrid({
@@ -55,7 +55,7 @@ function BeadPlate({ hands }: { hands: Hand[] }) {
   return (
     <ScrollGrid cols={cols} rows={6} cell={CELL} label="珠盤路">
       {cells.map((c, i) => {
-        const color = c.winner === 'B' ? RED : c.winner === 'P' ? BLUE : TIE
+        const color = c.winner === 'B' ? BLUE : c.winner === 'P' ? RED : TIE
         return (
           <g key={i}>
             <circle cx={c.col * CELL + CELL / 2} cy={c.row * CELL + CELL / 2} r={CELL / 2 - 2} fill={color} />

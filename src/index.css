@@ -22,10 +22,10 @@
   --color-win: #2ecc8f;
   --color-lose: #e5484d;
 
-  /* 出目・チャートの識別色(datavizパレット検証済:surface #111826) */
-  --color-banker: #e5484d;
-  --color-player: #4e97d6;
-  --color-tie: #b58c3c;
+  /* 出目・チャートの識別色(韓国カジノの罫線準拠:B=青/P=赤/T=緑。datavizパレット検証済) */
+  --color-banker: #4e97d6;
+  --color-player: #e5484d;
+  --color-tie: #35a366;
   --color-chartgreen: #35a366;
   --color-chartgold: #b58c3c;
   --color-neutralline: #93a1b3;
