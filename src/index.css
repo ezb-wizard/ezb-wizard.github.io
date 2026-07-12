@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  /* ブランド:深緑 × ゴールド × 白(暗所高コントラスト) */
+  --color-felt-950: #06231a;
+  --color-felt-900: #0b3d2e;
+  --color-felt-800: #10503d;
+  --color-felt-700: #1e5c48;
+  --color-gold-300: #d8b96a;
+  --color-gold-400: #c9a24b;
+  --color-gold-500: #b58c3c;
+  --color-gold-600: #94702c;
+  /* 出目・チャート(dataviz検証済:surface #0B3D2E) */
+  --color-banker: #e2685f;
+  --color-player: #4e97d6;
+  --color-tie: #35a366;
+  --color-chartgold: #b58c3c;
+  --color-neutralline: #9db4aa;
+  /* テキスト */
+  --color-ink: #f2efe6;
+  --color-ink-2: #b8ccc2;
+  --color-ink-3: #7fa093;
+}
+
+html,
+body {
+  height: 100%;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--color-felt-950);
+  color: var(--color-ink);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
+  user-select: none;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+/* 数値は等幅 */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
