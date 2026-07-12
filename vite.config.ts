@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // GitHub Pages(https://<user>.github.io/EZ-Baccarat/)配信用
+  base: '/EZ-Baccarat/',
   plugins: [
     react(),
     tailwindcss(),
