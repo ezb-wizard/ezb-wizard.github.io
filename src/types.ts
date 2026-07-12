@@ -7,13 +7,15 @@ export type CardCondition = 'any' | '2' | '3'
 export type CasinoId = 'PARADISE' | 'INSPIRE'
 
 /**
- * 本線ベットの配当ルール。
- * bankerRule 'ez' = ノーコミッション(1:1・ドラゴン7でプッシュ)/ 'commission' = bankerPayout倍(例0.95)
+ * 本線ベットの配当ルール。bankerRule:
+ * - 'ez' = ノーコミッション(1:1・ドラゴン7でプッシュ)
+ * - 'super6' = ノーコミッション(1:1・バンカーが合計6で勝つと0.5倍払い。タイガー系テーブルの標準)
+ * - 'commission' = bankerPayout倍(例0.95)
  */
 export interface MainBetRules {
   playerPayout: number
   bankerPayout: number
-  bankerRule: 'ez' | 'commission'
+  bankerRule: 'ez' | 'commission' | 'super6'
   tiePayout: number
 }
 

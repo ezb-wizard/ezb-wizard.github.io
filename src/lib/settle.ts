@@ -56,6 +56,8 @@ export function settleBet(bet: BetPlacement, hand: HandInput, ctx: SettleContext
     case 'B':
       if (hand.winner === 'B') {
         if (rules.bankerRule === 'ez' && isDragon7(hand)) return 0
+        // スーパー6式:バンカーが合計6で勝った場合は半額払い
+        if (rules.bankerRule === 'super6' && hand.winnerTotal === 6) return bet.amount * 0.5
         return bet.amount * rules.bankerPayout
       }
       return hand.winner === 'T' ? 0 : -bet.amount
@@ -88,7 +90,7 @@ const need = (defs: SideBetDef[], bets: BetPlacement[]): InputNeed =>
 
 /**
  * 勝利合計値の入力要否。
- * EZルールのバンカー勝ちは常に必須(D7プッシュ判定は本線精算に不可欠)。
+ * EZ/スーパー6ルールのバンカー勝ちは常に必須(D7プッシュ・6半額の判定は本線精算に不可欠)。
  * それ以外は、合計値条件を持つ有効サイドベットがある場合のみ表示し、ベット中なら必須。
  */
 export function totalNeed(
@@ -97,7 +99,7 @@ export function totalNeed(
   bets: BetPlacement[],
   rules: MainBetRules,
 ): InputNeed {
-  if (winner === 'B' && rules.bankerRule === 'ez') return 'required'
+  if (winner === 'B' && rules.bankerRule !== 'commission') return 'required'
   const defs = sideBets.filter(
     (d) => d.enabled && !d.pairTarget && d.side === winner && d.rules.some((r) => r.totals.length > 0),
   )

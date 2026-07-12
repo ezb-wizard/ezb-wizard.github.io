@@ -46,6 +46,13 @@ describe('本線控除率の動的算出', () => {
     const e = mainBetEdges({ ...EZ_MAIN_BETS, tiePayout: 8 })
     expect(e.banker * 100).toBeCloseTo(1.02, 1)
   })
+  it('スーパー6式バンカー(6勝ちは半額)の控除率は約1.46%', () => {
+    const e = mainBetEdges({ playerPayout: 1, bankerPayout: 1, bankerRule: 'super6', tiePayout: 8 })
+    expect(e.banker * 100).toBeCloseTo(1.46, 1)
+  })
+  it('PARADISEプリセットの本線はスーパー6式(タイガー系テーブル標準)', () => {
+    expect(casinoPreset('PARADISE').mainBets.bankerRule).toBe('super6')
+  })
 })
 
 describe('サイドベット控除率の動的算出', () => {

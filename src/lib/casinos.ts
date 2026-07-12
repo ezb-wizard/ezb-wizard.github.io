@@ -98,8 +98,8 @@ export function casinoPreset(id: CasinoId): CasinoConfig {
   }
   // PARADISE(仁川)Dragon Tiger Baccarat
   return {
-    // P/B本線の配当は提供データに未記載のため仮デフォルト(現地確認後に編集)
-    mainBets: { playerPayout: 1, bankerPayout: 0.95, bankerRule: 'commission', tiePayout: 8 },
+    // タイガー系テーブルの標準:ノーコミッション・バンカー6勝ちは半額(0.5倍)払い
+    mainBets: { playerPayout: 1, bankerPayout: 1, bankerRule: 'super6', tiePayout: 8 },
     sideBets: [
       ...pairBets(),
       ...dragonTigerFamily(),

@@ -183,27 +183,14 @@ export default function PlayScreen() {
           </button>
         </div>
 
-        {/* ベットスポット */}
-        <div className="grid grid-cols-3 gap-1.5">
-          <BetSpot label="バンカー" color="banker" amount={bets['B'] ?? 0} onAdd={() => addChip('B')} onClear={() => clearSpot('B')} />
-          <BetSpot label="プレイヤー" color="player" amount={bets['P'] ?? 0} onAdd={() => addChip('P')} onClear={() => clearSpot('P')} />
-          <BetSpot label={`タイ ${session.tiePayout}:1`} color="tie" amount={bets['T'] ?? 0} onAdd={() => addChip('T')} onClear={() => clearSpot('T')} />
-        </div>
-        {enabledSides.length > 0 && (
-          <div className="grid grid-cols-3 gap-1.5">
-            {enabledSides.map((d) => (
-              <BetSpot
-                key={d.id}
-                label={d.name}
-                color="gold"
-                small
-                amount={bets[d.id] ?? 0}
-                onAdd={() => addChip(d.id)}
-                onClear={() => clearSpot(d.id)}
-              />
-            ))}
-          </div>
-        )}
+        {/* ベットスポット(実テーブルと同じ配置) */}
+        <BetSpots
+          enabledSides={enabledSides}
+          tiePayout={rules.tiePayout}
+          bets={bets}
+          onAdd={addChip}
+          onClear={clearSpot}
+        />
         <div className="flex items-center justify-between text-xs">
           <span className="text-ink-3">
             合計ベット:<span className="num font-bold text-ink">{fmtKrw(betTotal)}</span>
@@ -284,6 +271,90 @@ export default function PlayScreen() {
 
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
       {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}
+    </div>
+  )
+}
+
+/**
+ * ベットスポット。実テーブル(Dragon Tiger Baccarat)と同じ配置:
+ *   スモールドラゴン / ドラゴンタイガー / ビッグドラゴン
+ *   スモールタイガー / タイ / ビッグタイガー
+ *   バンカーペア / バンカー(2列分)
+ *   プレイヤーペア / プレイヤー(2列分)
+ * テンプレートに無い有効サイドベット(カスタム等)は最上段に3列で並べる。
+ */
+const TABLE_LAYOUT: string[][] = [
+  ['SMALL_DRAGON', 'DRAGON_TIGER', 'BIG_DRAGON'],
+  ['SMALL_TIGER', 'T', 'BIG_TIGER'],
+  ['B_PAIR', 'B'],
+  ['P_PAIR', 'P'],
+]
+
+function BetSpots({
+  enabledSides,
+  tiePayout,
+  bets,
+  onAdd,
+  onClear,
+}: {
+  enabledSides: SideBetDef[]
+  tiePayout: number
+  bets: Record<string, number>
+  onAdd: (target: string) => void
+  onClear: (target: string) => void
+}) {
+  const sideById = new Map(enabledSides.map((d) => [d.id, d]))
+  const available = (id: string) => id === 'B' || id === 'P' || id === 'T' || sideById.has(id)
+  const templateRows = TABLE_LAYOUT.map((r) => r.filter(available)).filter((r) => r.length > 0)
+  const used = new Set(templateRows.flat())
+  const extras = enabledSides.filter((d) => !used.has(d.id)).map((d) => d.id)
+  const extraRows: string[][] = []
+  for (let i = 0; i < extras.length; i += 3) extraRows.push(extras.slice(i, i + 3))
+  const rows = [...extraRows, ...templateRows]
+
+  const meta = (id: string): { label: string; color: 'banker' | 'player' | 'tie' | 'gold'; small: boolean } => {
+    if (id === 'B') return { label: 'バンカー', color: 'banker', small: false }
+    if (id === 'P') return { label: 'プレイヤー', color: 'player', small: false }
+    if (id === 'T') return { label: `タイ ${tiePayout}:1`, color: 'tie', small: true }
+    const d = sideById.get(id)!
+    const color =
+      id === 'DRAGON_TIGER' || d.pairTarget === 'either'
+        ? 'gold'
+        : d.pairTarget === 'B' || d.side === 'B'
+          ? 'banker'
+          : d.pairTarget === 'P' || d.side === 'P'
+            ? 'player'
+            : 'gold'
+    return { label: d.name, color, small: true }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {rows.map((row, ri) => (
+        <div key={ri} className="grid grid-cols-3 gap-1.5">
+          {row.map((id) => {
+            const m = meta(id)
+            const span =
+              (id === 'B' || id === 'P') && row.length === 2
+                ? 'col-span-2'
+                : row.length === 1
+                  ? 'col-span-3'
+                  : ''
+            return (
+              <div key={id} className={span}>
+                <BetSpot
+                  label={m.label}
+                  color={m.color}
+                  small={m.small}
+                  amount={bets[id] ?? 0}
+                  onAdd={() => onAdd(id)}
+                  onClear={() => onClear(id)}
+                />
+              </div>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }

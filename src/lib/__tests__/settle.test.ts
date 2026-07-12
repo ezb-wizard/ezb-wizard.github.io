@@ -72,6 +72,28 @@ describe('本線精算(コミッション式 0.95:1)', () => {
   })
 })
 
+describe('本線精算(スーパー6式:ノーコミッション・バンカー6勝ちは半額)', () => {
+  const SUPER6: MainBetRules = { playerPayout: 1, bankerPayout: 1, bankerRule: 'super6', tiePayout: 8 }
+  const ctxS6: SettleContext = { mainBets: SUPER6, sideBets: [] }
+  it('バンカーが合計6で勝つと0.5倍払い(枚数不問)', () => {
+    expect(settleBet({ target: 'B', amount: 10000 }, bWin(6, 2), ctxS6)).toBe(5000)
+    expect(settleBet({ target: 'B', amount: 10000 }, bWin(6, 3), ctxS6)).toBe(5000)
+  })
+  it('6以外の勝ちは1:1(D7プッシュは適用されない)', () => {
+    expect(settleBet({ target: 'B', amount: 10000 }, bWin(7, 3), ctxS6)).toBe(10000)
+    expect(settleBet({ target: 'B', amount: 10000 }, bWin(9, 2), ctxS6)).toBe(10000)
+  })
+  it('タイはプッシュ、負けは没収', () => {
+    expect(settleBet({ target: 'B', amount: 10000 }, tie(6), ctxS6)).toBe(0)
+    expect(settleBet({ target: 'B', amount: 10000 }, pWin(8), ctxS6)).toBe(-10000)
+  })
+  it('スーパー6式ではバンカー勝ちの合計値が常に必須(半額判定に不可欠)', () => {
+    expect(totalNeed('B', [], [], SUPER6)).toBe('required')
+    expect(cardsNeed('B', 6, [], [], SUPER6)).toBe('none')
+    expect(totalNeed('P', [], [], SUPER6)).toBe('none')
+  })
+})
+
 describe('旧セッションとの後方互換', () => {
   it('mainBets の無い旧セッションはEZルール+当時のタイ配当として解釈される', () => {
     const rules = sessionRules({ tiePayout: 9 })

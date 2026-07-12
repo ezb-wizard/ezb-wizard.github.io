@@ -149,6 +149,8 @@ export interface TheoreticalStats {
   pTie: number
   /** ドラゴン7(バンカー3枚合計7勝ち) */
   pDragon7: number
+  /** バンカーが合計6で勝つ確率(スーパー6式の半額払い判定用) */
+  pBanker6: number
   /** パンダ8(プレイヤー3枚合計8勝ち) */
   pPanda8: number
   /** プレイヤーペア(=バンカーペアと同値) */
@@ -171,6 +173,7 @@ export function getTheoreticalStats(): TheoreticalStats {
   let pP = 0
   let pT = 0
   let pD7 = 0
+  let pB6 = 0
   let pP8 = 0
   let pPP = 0
   let pEP = 0
@@ -178,6 +181,7 @@ export function getTheoreticalStats(): TheoreticalStats {
     if (b.winner === 'B') {
       pB += b.prob
       if (b.bTotal === 7 && b.bCards === 3) pD7 += b.prob
+      if (b.bTotal === 6) pB6 += b.prob
     } else if (b.winner === 'P') {
       pP += b.prob
       if (b.pTotal === 8 && b.pCards === 3) pP8 += b.prob
@@ -192,6 +196,7 @@ export function getTheoreticalStats(): TheoreticalStats {
     pPlayer: pP,
     pTie: pT,
     pDragon7: pD7,
+    pBanker6: pB6,
     pPanda8: pP8,
     pPlayerPair: pPP,
     pEitherPair: pEP,
@@ -211,7 +216,9 @@ export function mainBetEdges(rules: MainBetRules): { banker: number; player: num
   const banker =
     rules.bankerRule === 'ez'
       ? t.pPlayer - (t.pBanker - t.pDragon7) * rules.bankerPayout
-      : t.pPlayer - t.pBanker * rules.bankerPayout
+      : rules.bankerRule === 'super6'
+        ? t.pPlayer - ((t.pBanker - t.pBanker6) * rules.bankerPayout + t.pBanker6 * 0.5)
+        : t.pPlayer - t.pBanker * rules.bankerPayout
   const player = t.pBanker - t.pPlayer * rules.playerPayout
   const tie = 1 - t.pTie - rules.tiePayout * t.pTie
   return { banker, player, tie }

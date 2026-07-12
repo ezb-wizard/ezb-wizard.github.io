@@ -16,12 +16,12 @@ export default function SessionSetup() {
 
   const [startCcy, setStartCcy] = useState<'KRW' | 'JPY'>('KRW')
   const [startAmount, setStartAmount] = useState<number | null>(1_000_000)
-  const [tableMin, setTableMin] = useState<number | null>(10_000)
-  const [tableMax, setTableMax] = useState<number | null>(1_000_000)
+  const [tableMin, setTableMin] = useState<number | null>(100_000)
+  const [tableMax, setTableMax] = useState<number | null>(30_000_000)
   const [mainBets, setMainBets] = useState<MainBetRules>(() => casinoConfig(settings).mainBets)
   const [sideBets, setSideBets] = useState<SideBetDef[]>(() => casinoConfig(settings).sideBets)
-  const [slMode, setSlMode] = useState<LimitMode>('pct')
-  const [slValue, setSlValue] = useState<number | null>(50)
+  const [slMode, setSlMode] = useState<LimitMode>('off')
+  const [slValue, setSlValue] = useState<number | null>(null)
   const [tpMode, setTpMode] = useState<LimitMode>('off')
   const [tpValue, setTpValue] = useState<number | null>(null)
   const [savedNote, setSavedNote] = useState(false)
@@ -34,14 +34,12 @@ export default function SessionSetup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [casino])
 
-  // 前回セッションから金額系のみ初期値に
+  // 前回セッションから開始資金のみ初期値に(テーブルmin/maxは既定値を維持)
   useEffect(() => {
     void (async () => {
       const last = await db.sessions.orderBy('startedAt').last()
       if (!last) return
       setStartAmount(last.startKrw)
-      setTableMin(last.tableMin)
-      setTableMax(last.tableMax)
     })()
   }, [])
 
@@ -171,15 +169,16 @@ export default function SessionSetup() {
       <Field label={`本線配当(${CASINO_NAMES[casino]})`}>
         <div className="card-luxe space-y-3 p-3">
           <div>
-            <span className="mb-1 block text-[11px] text-ink-3">バンカー</span>
+            <span className="mb-1 block text-[11px] text-ink-3">バンカー(ノーコミッション2方式+コミッション式)</span>
             <Seg
               options={[
-                { value: 'commission', label: 'コミッション式' },
-                { value: 'ez', label: 'EZノーコミッション' },
+                { value: 'super6', label: '6は半額' },
+                { value: 'ez', label: 'EZ(D7押し)' },
+                { value: 'commission', label: 'コミッション' },
               ]}
               value={mainBets.bankerRule}
               onChange={(v) =>
-                setMainBets((m) => ({ ...m, bankerRule: v, bankerPayout: v === 'ez' ? 1 : 0.95 }))
+                setMainBets((m) => ({ ...m, bankerRule: v, bankerPayout: v === 'commission' ? 0.95 : 1 }))
               }
             />
             {mainBets.bankerRule === 'commission' ? (
@@ -192,8 +191,12 @@ export default function SessionSetup() {
                 />
                 <span className="text-xs text-ink-2">:1</span>
               </div>
-            ) : (
+            ) : mainBets.bankerRule === 'ez' ? (
               <p className="mt-1 text-[10px] text-ink-3">1:1・ドラゴン7(バンカー3枚合計7勝ち)はプッシュ</p>
+            ) : (
+              <p className="mt-1 text-[10px] text-ink-3">
+                1:1・バンカーが合計6で勝った場合は0.5倍(半額)払い ※タイガー系テーブルの標準
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
