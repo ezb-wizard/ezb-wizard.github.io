@@ -8,13 +8,14 @@ import { sideBetStats } from '../lib/sidebets'
 import { matchRule, possibleMatch, settleBet } from '../lib/settle'
 import { fmtJpy, fmtKrw, fmtPct, fmtSigned, krwToJpy } from '../lib/money'
 import { LineChart } from './charts'
-import BigRoad from './BigRoad'
-import { Seg } from './ui'
+import RoadsPanel from './RoadsPanel'
+import { Confirm, Seg } from './ui'
 
 export default function StatsScreen() {
-  const { session: liveSession, rate } = useApp()
+  const { session: liveSession, rate, deleteSession } = useApp()
   const sessions = useLiveQuery(() => db.sessions.orderBy('startedAt').reverse().toArray(), []) ?? []
   const [selRaw, setSelRaw] = useState<number | 'all' | null>(null)
+  const [deleting, setDeleting] = useState<Session | null>(null)
 
   const sel: number | 'all' | null = selRaw ?? liveSession?.id ?? sessions[0]?.id ?? null
   const selSession: Session | null =
@@ -69,8 +70,8 @@ export default function StatsScreen() {
           <Section title="資金推移">
             <BankrollSection session={selSession} hands={hands} curRate={curRate} />
           </Section>
-          <Section title="出目履歴(大路)">
-            <BigRoad hands={hands} sideBets={selSession.sideBets} />
+          <Section title="出目履歴(罫線)">
+            <RoadsPanel hands={hands} sideBets={selSession.sideBets} />
           </Section>
         </>
       )}
@@ -87,28 +88,55 @@ export default function StatsScreen() {
           {sessions.map((s) => {
             const pl = s.endKrw != null ? s.endKrw - s.startKrw : null
             return (
-              <button
-                key={s.id}
-                className={`flex w-full items-center gap-2 px-3 py-2.5 text-left ${sel === s.id ? 'bg-base-800' : ''}`}
-                onClick={() => setSelRaw(s.id!)}
-              >
-                <div className="flex-1">
-                  <div className="text-xs font-bold">
-                    {new Date(s.startedAt).toLocaleDateString('ja-JP')}{' '}
-                    {s.endedAt == null && <span className="text-gold-300">進行中</span>}
+              <div key={s.id} className={`flex w-full items-center gap-1 pr-1 ${sel === s.id ? 'bg-base-800' : ''}`}>
+                <button
+                  className="flex flex-1 items-center gap-2 px-3 py-2.5 text-left"
+                  onClick={() => setSelRaw(s.id!)}
+                >
+                  <div className="flex-1">
+                    <div className="text-xs font-bold">
+                      {new Date(s.startedAt).toLocaleDateString('ja-JP')}{' '}
+                      {s.endedAt == null && <span className="text-gold-300">進行中</span>}
+                    </div>
+                    <div className="num text-[10px] text-ink-3">
+                      {s.handCount ?? '—'}ハンド / 開始{fmtKrw(s.startKrw)}
+                    </div>
                   </div>
-                  <div className="num text-[10px] text-ink-3">
-                    {s.handCount ?? '—'}ハンド / 開始{fmtKrw(s.startKrw)}
-                  </div>
-                </div>
-                <span className={`num text-sm font-bold ${pl == null ? 'text-ink-3' : pl > 0 ? 'text-win' : pl < 0 ? 'text-lose' : ''}`}>
-                  {pl == null ? '—' : fmtSigned(pl)}
-                </span>
-              </button>
+                  <span className={`num text-sm font-bold ${pl == null ? 'text-ink-3' : pl > 0 ? 'text-win' : pl < 0 ? 'text-lose' : ''}`}>
+                    {pl == null ? '—' : fmtSigned(pl)}
+                  </span>
+                </button>
+                {s.endedAt != null && (
+                  <button
+                    className="press flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-3"
+                    aria-label="このセッションを削除"
+                    onClick={() => setDeleting(s)}
+                  >
+                    🗑
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>
       </Section>
+
+      {deleting && (
+        <Confirm
+          message="このセッションを削除しますか?"
+          detail={`${new Date(deleting.startedAt).toLocaleDateString('ja-JP')} / ${deleting.handCount ?? 0}ハンド / 収支 ${
+            deleting.endKrw != null ? fmtSigned(deleting.endKrw - deleting.startKrw) : '—'
+          }。ハンド記録ごと完全に削除され、元に戻せません。`}
+          okLabel="削除する"
+          onOk={() => {
+            const id = deleting.id!
+            setDeleting(null)
+            if (sel === id) setSelRaw('all')
+            void deleteSession(id)
+          }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
   )
 }

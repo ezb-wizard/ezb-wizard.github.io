@@ -6,12 +6,15 @@ import { recommendedBet } from '../lib/bankroll'
 import { fmtBoth, fmtKrw, fmtSigned } from '../lib/money'
 import { Confirm, GhostBtn } from './ui'
 import HandEditModal from './HandEditModal'
+import RoadsModal from './RoadsModal'
 
-const CHIPS = [10_000, 50_000, 100_000, 500_000]
+const DEFAULT_CHIPS = [100_000, 500_000, 1_000_000, 5_000_000]
 
 export default function PlayScreen() {
   const { session, hands, rate, settings, addHand, undoLast, endSession } = useApp()
-  const [chip, setChip] = useState(10_000)
+  const chips = settings.chipPresets?.length === 4 ? settings.chipPresets : DEFAULT_CHIPS
+  const [chip, setChip] = useState(() => chips[0])
+  const [roadsOpen, setRoadsOpen] = useState(false)
   const [bets, setBets] = useState<Record<string, number>>({})
   const [entryWinner, setEntryWinner] = useState<Winner | null>(null)
   const [pendingInput, setPendingInput] = useState<HandInput | null>(null)
@@ -94,14 +97,22 @@ export default function PlayScreen() {
       <div className="card-luxe flex-1">
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-xs font-bold text-ink-2">履歴({hands.length}ハンド)</span>
-          {last && (
+          <div className="flex gap-1.5">
             <button
               className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
-              onClick={() => void undoLast()}
+              onClick={() => setRoadsOpen(true)}
             >
-              ↩ 直前を取消
+              罫線
             </button>
-          )}
+            {last && (
+              <button
+                className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
+                onClick={() => void undoLast()}
+              >
+                ↩ 取消
+              </button>
+            )}
+          </div>
         </div>
         <div className="max-h-56 overflow-y-auto">
           {hands.length === 0 && <p className="px-3 pb-3 text-xs text-ink-3">まだ記録がありません</p>}
@@ -141,7 +152,7 @@ export default function PlayScreen() {
       <div className="sticky bottom-0 z-20 -mx-3 -mb-3 space-y-1.5 border-t border-gold-600/25 bg-base-950/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
         {/* チップ選択 */}
         <div className="flex gap-1.5">
-          {CHIPS.map((c) => (
+          {chips.map((c) => (
             <button
               key={c}
               className={`num press h-11 flex-1 rounded-lg border text-xs font-bold ${
@@ -272,6 +283,7 @@ export default function PlayScreen() {
       )}
 
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
+      {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}
     </div>
   )
 }

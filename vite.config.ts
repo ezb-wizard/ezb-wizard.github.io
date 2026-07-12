@@ -30,6 +30,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // ホーム画面用アイコンはOS側が取得するためオフラインキャッシュ不要
+        globIgnores: ['icons/**'],
         navigateFallback: 'index.html',
       },
     }),

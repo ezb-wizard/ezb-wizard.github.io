@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../store'
 import { exportCsv, exportJson } from '../lib/export'
 import { fmtDateTime } from '../lib/money'
-import { DecInput, Field, GhostBtn, Seg } from './ui'
+import { DecInput, Field, GhostBtn, NumInput, Seg } from './ui'
 
 export default function SettingsScreen() {
   const { settings, updateSettings, rate, refreshRate } = useApp()
@@ -41,16 +41,38 @@ export default function SettingsScreen() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-gold-300">資金管理</h2>
-        <Field label={`推奨ベット率:資金の ${settings.betPct}%(1〜3%)`}>
+        <Field label={`推奨ベット率:資金の ${settings.betPct}%(1〜10%)`}>
           <input
             type="range"
             min={1}
-            max={3}
-            step={0.1}
+            max={10}
+            step={0.5}
             value={settings.betPct}
             className="h-12 w-full accent-[#c9a24b]"
             onChange={(e) => void updateSettings({ betPct: Number(e.target.value) })}
           />
+          {settings.betPct > 3 && (
+            <p className="mt-1 text-[10px] font-bold text-lose">
+              3%超は資金の変動が非常に大きくなります(例: {settings.betPct}%では約
+              {Math.floor(100 / settings.betPct)}連敗で資金が尽きるペース)
+            </p>
+          )}
+        </Field>
+        <Field label="ベットチッププリセット(KRW・記録画面のボタン4種)">
+          <div className="grid grid-cols-2 gap-2">
+            {(settings.chipPresets ?? [100_000, 500_000, 1_000_000, 5_000_000]).map((c, i) => (
+              <NumInput
+                key={i}
+                value={c}
+                onChange={(v) => {
+                  if (v == null || v <= 0) return
+                  const next = [...(settings.chipPresets ?? [100_000, 500_000, 1_000_000, 5_000_000])]
+                  next[i] = v
+                  void updateSettings({ chipPresets: next })
+                }}
+              />
+            ))}
+          </div>
         </Field>
         <Field label="チップ丸め単位(KRW)">
           <Seg

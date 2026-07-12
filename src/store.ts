@@ -8,6 +8,7 @@ import {
   type RateInfo,
   type Session,
   type Settings,
+  type Winner,
 } from './types'
 import { db, loadCachedRate, loadSettings, saveCachedRate, saveSettings } from './lib/db'
 import { fetchRateFromApis } from './lib/rates'
@@ -36,9 +37,13 @@ interface AppState {
   startSession(cfg: Omit<Session, 'id' | 'startedAt' | 'endedAt' | 'endKrw' | 'handCount'>): Promise<void>
   endSession(): Promise<Session>
   addHand(input: HandInput, bets: BetPlacement[]): Promise<void>
+  /** 途中参加時などに過去の出目を「見」としてまとめて登録 */
+  addHandsBulk(winners: Winner[]): Promise<void>
   undoLast(): Promise<void>
   updateHand(id: number, input: HandInput, bets: BetPlacement[]): Promise<void>
   deleteHand(id: number): Promise<void>
+  /** 確定(終了)済みセッションをハンドごと削除 */
+  deleteSession(id: number): Promise<void>
 }
 
 function settleCtx(session: Session): SettleContext {
@@ -67,7 +72,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async init() {
-    const settings = (await loadSettings()) ?? DEFAULT_SETTINGS
+    // 保存済み設定に無い新フィールドはデフォルトで補完
+    const settings: Settings = { ...DEFAULT_SETTINGS, ...((await loadSettings()) ?? {}) }
     const cached = await loadCachedRate()
     // 進行中セッション(endedAt が null)を復元
     const open = await db.sessions.filter((s) => s.endedAt === null).last()
@@ -165,6 +171,29 @@ export const useApp = create<AppState>((set, get) => ({
     set({ hands: [...hands, { ...hand, id }] })
   },
 
+  async addHandsBulk(winners) {
+    const { session, hands } = get()
+    if (!session?.id) throw new Error('セッションがありません')
+    let seq = hands.length ? hands[hands.length - 1].seq : 0
+    const ts = Date.now()
+    const newHands: Hand[] = winners.map((w) => ({
+      winner: w,
+      winnerTotal: null,
+      winnerCards: null,
+      loserTotal: null,
+      loserCards: null,
+      pPair: null,
+      bPair: null,
+      sessionId: session.id!,
+      seq: ++seq,
+      ts,
+      bets: [],
+      net: 0,
+    }))
+    const ids = (await db.hands.bulkAdd(newHands, { allKeys: true })) as number[]
+    set({ hands: [...hands, ...newHands.map((h, i) => ({ ...h, id: ids[i] }))] })
+  },
+
   async undoLast() {
     const { hands } = get()
     const last = hands[hands.length - 1]
@@ -189,5 +218,12 @@ export const useApp = create<AppState>((set, get) => ({
     const { hands } = get()
     await db.hands.delete(id)
     set({ hands: hands.filter((h) => h.id !== id) })
+  },
+
+  async deleteSession(id) {
+    const { session } = get()
+    if (session?.id === id) throw new Error('進行中のセッションは削除できません')
+    await db.hands.where('sessionId').equals(id).delete()
+    await db.sessions.delete(id)
   },
 }))

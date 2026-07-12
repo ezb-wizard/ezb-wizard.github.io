@@ -150,10 +150,12 @@ export interface Settings {
   casino?: CasinoId
   /** カジノごとのカスタム配当構成(未編集のカジノはプリセットを使用) */
   casinoCustom?: Partial<Record<CasinoId, CasinoConfig>>
-  /** 推奨ベット率(% of 資金) */
+  /** 推奨ベット率(% of 資金、1〜10) */
   betPct: number
   /** チップ丸め単位(KRW) */
   chipUnit: number
+  /** ベットチッププリセット(KRW・4種) */
+  chipPresets?: number[]
   manualRate: number | null
   /** true: 手動レートを固定使用(自動更新しない) */
   manualRateFixed: boolean
@@ -167,6 +169,7 @@ export const DEFAULT_SETTINGS: Settings = {
   casinoCustom: {},
   betPct: 1.5,
   chipUnit: 10_000,
+  chipPresets: [100_000, 500_000, 1_000_000, 5_000_000],
   manualRate: null,
   manualRateFixed: false,
   manualRateTs: null,

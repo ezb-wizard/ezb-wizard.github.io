@@ -38,7 +38,11 @@ EZバカラ専用セッション記録・資金管理PWA。韓国カジノ(PARAD
 - React 19 + TypeScript + Vite + Tailwind v4。状態: zustand(`src/store.ts`)、永続化: Dexie(`src/lib/db.ts`)
 - 精算エンジン: `src/lib/settle.ts`(settleBet/settleHand/matchRule)。Workerも同じ関数を使用
 - シミュレーター: `src/workers/sim.worker.ts`(完全列挙テーブルをそのままサンプリング)
-- 為替: `src/lib/rates.ts`(er-api→frankfurter→キャッシュ→手動)。大路: `src/lib/road.ts`
+- 為替: `src/lib/rates.ts`(er-api→frankfurter→キャッシュ→手動)
+- 罫線: `src/lib/road.ts`(大路・珠盤路・派生罫線 deriveRoad L=1/2/3 + layoutDerived)、
+  表示は `RoadsPanel.tsx`(統計+プレイ中の`RoadsModal`)。**「予測」機能は禁止** —
+  確率表示は理論値(固定)+収束確認用の実績併記のみ(`ProbPanel`)。
+  途中参加は `store.addHandsBulk`(見扱い・net=0)でまとめ登録。確定セッションは `deleteSession` で削除可
 
 ## UI規約(テーマ「Casino Luxe」ダーク固定)
 
