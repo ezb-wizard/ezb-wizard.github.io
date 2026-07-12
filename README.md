@@ -2,7 +2,7 @@
 
 EZバカラ(ノーコミッションバカラ)専用のセッション記録・資金管理PWA。韓国カジノでの個人利用を想定(基準通貨KRW・JPY常時併記)。スマホ縦画面・片手操作前提、完全ローカル動作(IndexedDB)でオフライン対応。
 
-**公開URL**: https://daisukesekino.github.io/EZ-Baccarat/
+**公開URL**: https://ezb-wizard.github.io/
 
 ## 主な機能
 

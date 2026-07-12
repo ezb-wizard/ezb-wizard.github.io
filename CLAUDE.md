@@ -59,4 +59,4 @@ EZバカラ専用セッション記録・資金管理PWA。韓国カジノ(PARAD
 ## 検証
 
 UIスモークはPlaywright+システムEdge(`executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'`)。
-`main` へのpushでGitHub Actionsがテスト→ビルド→GitHub Pagesデプロイ(https://daisukesekino.github.io/EZ-Baccarat/)。
+`main` へのpushでGitHub Actionsがテスト→ビルド→GitHub Pagesデプロイ(https://ezb-wizard.github.io/ ・ リポジトリは ezb-wizard/ezb-wizard.github.io)。
