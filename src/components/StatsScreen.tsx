@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../lib/db'
 import { useApp } from '../store'
-import { sessionRules, type Hand, type Session } from '../types'
+import { sessionRules, type Checkpoint, type Hand, type Session } from '../types'
+import { backtest, BACKTEST_NAMES, type BacktestStrategyId } from '../lib/backtest'
 import { getTheoreticalStats } from '../lib/baccarat'
 import { sideBetStats } from '../lib/sidebets'
 import { matchRule, possibleMatch, settleBet } from '../lib/settle'
@@ -29,6 +30,12 @@ export default function StatsScreen() {
         return all.sort((a, b) => a.ts - b.ts || a.seq - b.seq)
       }
       return db.hands.where('sessionId').equals(sel).sortBy('seq')
+    }, [sel]) ?? []
+
+  const checkpoints =
+    useLiveQuery(async () => {
+      if (typeof sel !== 'number') return [] as Checkpoint[]
+      return db.checkpoints.where('sessionId').equals(sel).sortBy('ts')
     }, [sel]) ?? []
 
   const sessionById = useMemo(() => {
@@ -68,7 +75,7 @@ export default function StatsScreen() {
       {selSession && (
         <>
           <Section title="資金推移">
-            <BankrollSection session={selSession} hands={hands} curRate={curRate} />
+            <BankrollSection session={selSession} hands={hands} checkpoints={checkpoints} curRate={curRate} />
           </Section>
           <Section title="出目履歴(罫線)">
             <RoadsPanel hands={hands} sideBets={selSession.sideBets} />
@@ -81,6 +88,10 @@ export default function StatsScreen() {
 
       <Section title="実績 vs 理論値">
         <TheoryComparison hands={hands} config={config} />
+      </Section>
+
+      <Section title="出目パターン検証(バックテスト)">
+        <BacktestPanel hands={hands} config={config} />
       </Section>
 
       <Section title="セッション一覧">
@@ -325,15 +336,21 @@ function PerTargetTable({ hands, sessionById }: { hands: Hand[]; sessionById: Ma
 function BankrollSection({
   session,
   hands,
+  checkpoints,
   curRate,
 }: {
   session: Session
   hands: Hand[]
+  checkpoints: Checkpoint[]
   curRate: number | null
 }) {
   const [ccy, setCcy] = useState<'krw' | 'jpy'>('krw')
   const rate = session.rate ?? curRate
+  // チェックポイントが2点以上あれば「時刻×残高」で描画(結果のみ記録モード)。
+  // なければ従来のハンド累積(ベット額記録モード)
+  const useCp = checkpoints.length >= 2
   const points = useMemo(() => {
+    if (useCp) return checkpoints.map((c) => ({ x: c.ts, y: c.krw }))
     let cur = session.startKrw
     const pts = [{ x: 0, y: cur }]
     hands.forEach((h, i) => {
@@ -341,16 +358,26 @@ function BankrollSection({
       pts.push({ x: i + 1, y: cur })
     })
     return pts
-  }, [session, hands])
+  }, [session, hands, checkpoints, useCp])
 
   const conv = (v: number) => (ccy === 'jpy' && rate ? v / rate : v)
   const fmt = ccy === 'jpy' && rate ? (v: number) => fmtJpy(v) : (v: number) => fmtKrw(v)
+  const timeFmt = (ts: number) =>
+    new Date(ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
 
   const refLines = [
     { y: conv(session.startKrw), label: '開始', color: '#93a1b3' },
     ...(session.stopLossKrw != null ? [{ y: conv(session.stopLossKrw), label: 'SL', color: '#e5484d' }] : []),
     ...(session.takeProfitKrw != null ? [{ y: conv(session.takeProfitKrw), label: 'TP', color: '#2ecc8f' }] : []),
   ]
+
+  // 時給換算(確定セッションは終了時刻、進行中は現在まで)
+  const endTs = session.endedAt ?? Date.now()
+  const elapsedH = Math.max(0.25, (endTs - session.startedAt) / 3_600_000)
+  const lastKrw = useCp
+    ? checkpoints[checkpoints.length - 1].krw
+    : session.endKrw ?? session.startKrw + hands.reduce((s, h) => s + h.net, 0)
+  const perHour = (lastKrw - session.startKrw) / elapsedH
 
   return (
     <div>
@@ -368,9 +395,74 @@ function BankrollSection({
       <LineChart
         points={points.map((p) => ({ x: p.x, y: conv(p.y) }))}
         yFmt={fmt}
-        xFmt={(x) => (x === 0 ? '開始' : `#${x}ハンド`)}
+        xFmt={useCp ? (x) => `${timeFmt(x)} 時点` : (x) => (x === 0 ? '開始' : `#${x}ハンド`)}
         refLines={refLines}
       />
+      <p className="num mt-1 text-right text-[10px] text-ink-3">
+        時給換算 <span className={perHour < 0 ? 'text-lose' : 'text-win'}>{fmtSigned(perHour)}</span>
+        (経過 {elapsedH.toFixed(1)}h)
+      </p>
+    </div>
+  )
+}
+
+/**
+ * 出目パターン検証:記録済みデータに単純な賭け方を1単位フラットで適用し、
+ * どの賭け方でも収支が理論期待損失(控除率)に収束することを確認する教育機能。予測ではない。
+ */
+function BacktestPanel({ hands, config }: { hands: Hand[]; config: Session | null }) {
+  const [strategy, setStrategy] = useState<BacktestStrategyId>('follow')
+  const rules = config ? sessionRules(config) : null
+  const result = useMemo(
+    () => (rules && hands.length > 0 ? backtest(hands, rules, strategy) : null),
+    [hands, rules, strategy],
+  )
+  if (!rules || !result) return <p className="text-xs text-ink-3">記録がまだありません</p>
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1.5 overflow-x-auto">
+        {(Object.keys(BACKTEST_NAMES) as BacktestStrategyId[]).map((id) => (
+          <button
+            key={id}
+            className={`h-9 shrink-0 rounded-full border px-3 text-[11px] font-bold ${
+              strategy === id ? 'border-gold-500 bg-gold-500 text-base-950' : 'border-base-700 text-ink-2'
+            }`}
+            onClick={() => setStrategy(id)}
+          >
+            {BACKTEST_NAMES[id]}
+          </button>
+        ))}
+      </div>
+      <div className="num grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="rounded-lg bg-base-950 p-2">
+          <div className="text-[10px] text-ink-3">ベット数</div>
+          <div className="font-bold">{result.betCount}</div>
+        </div>
+        <div className="rounded-lg bg-base-950 p-2">
+          <div className="text-[10px] text-ink-3">実績(単位)</div>
+          <div className={`font-bold ${result.netUnits > 0 ? 'text-win' : result.netUnits < 0 ? 'text-lose' : ''}`}>
+            {result.netUnits > 0 ? '+' : ''}
+            {result.netUnits.toFixed(1)}
+          </div>
+        </div>
+        <div className="rounded-lg bg-base-950 p-2">
+          <div className="text-[10px] text-ink-3">理論期待</div>
+          <div className="font-bold text-ink-2">{result.expectedUnits.toFixed(1)}</div>
+        </div>
+      </div>
+      <LineChart
+        points={result.points}
+        yFmt={(y) => `${y > 0 ? '+' : ''}${y.toFixed(1)}u`}
+        xFmt={(x) => `${x}ハンド時点`}
+        refLines={[{ y: 0, label: '±0' }]}
+        height={140}
+      />
+      <p className="text-[10px] leading-relaxed text-ink-3">
+        1単位フラットベットで「{BACKTEST_NAMES[strategy]}」を全記録に適用した結果です。
+        試行を重ねるほどどの賭け方も理論期待(-控除率×ベット数)へ収束します —
+        <b className="text-ink">過去に有効だったパターンは存在せず、次のハンドの予測にも使えません</b>。
+      </p>
     </div>
   )
 }

@@ -55,6 +55,20 @@ export default function SettingsScreen() {
             ベット額も記録: チップとベットスポットが表示され、ハンドごとの精算・収支を自動計算します。
           </p>
         </Field>
+        <Field label="残高記録リマインダー(結果のみモード)">
+          <Seg
+            options={[
+              { value: 0, label: 'なし' },
+              { value: 30, label: '30分' },
+              { value: 60, label: '60分' },
+              { value: 90, label: '90分' },
+            ]}
+            value={([0, 30, 60, 90].includes(settings.checkpointReminderMin ?? 60)
+              ? (settings.checkpointReminderMin ?? 60)
+              : 60) as 0 | 30 | 60 | 90}
+            onChange={(v) => void updateSettings({ checkpointReminderMin: v })}
+          />
+        </Field>
         <Field label={`推奨ベット率:資金の ${settings.betPct}%(1〜10%)`}>
           <input
             type="range"

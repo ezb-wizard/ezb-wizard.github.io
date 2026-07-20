@@ -22,10 +22,11 @@ function stamp(): string {
 export async function exportJson(): Promise<void> {
   const sessions = await db.sessions.toArray()
   const hands = await db.hands.toArray()
+  const checkpoints = await db.checkpoints.toArray()
   const kv = await db.kv.toArray()
   download(
     `ez-baccarat_${stamp()}.json`,
-    JSON.stringify({ exportedAt: new Date().toISOString(), sessions, hands, kv }, null, 2),
+    JSON.stringify({ exportedAt: new Date().toISOString(), sessions, hands, checkpoints, kv }, null, 2),
     'application/json',
   )
 }

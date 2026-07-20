@@ -85,10 +85,20 @@ export interface Hand extends HandInput {
   sessionId: number
   seq: number
   ts: number
+  /** シュー番号(1始まり)。罫線とシュー内統計はシュー単位でリセットされる */
+  shoe?: number
   /** 空配列 = 見(観戦) */
   bets: BetPlacement[]
   /** 精算結果(KRW、±) */
   net: number
+}
+
+/** 資金チェックポイント(時刻+残高の手入力) */
+export interface Checkpoint {
+  id?: number
+  sessionId: number
+  ts: number
+  krw: number
 }
 
 /** カジノごとの配当構成(プリセット or カスタム永続化) */
@@ -170,6 +180,8 @@ export interface Settings {
    * false(既定)= 結果のみ記録(金額入力なし。収支はセッション終了時の手入力)
    */
   betTracking?: boolean
+  /** 残高記録リマインダーの間隔(分)。0 = 無効 */
+  checkpointReminderMin?: number
   manualRate: number | null
   /** true: 手動レートを固定使用(自動更新しない) */
   manualRateFixed: boolean
@@ -186,6 +198,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chipPresets: [100_000, 500_000, 1_000_000, 5_000_000],
   quickMode: true,
   betTracking: false,
+  checkpointReminderMin: 60,
   manualRate: null,
   manualRateFixed: false,
   manualRateTs: null,

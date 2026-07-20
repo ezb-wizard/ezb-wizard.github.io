@@ -1,9 +1,22 @@
-import { useState } from 'react'
-import { bankrollOf, useApp } from '../store'
-import { sessionRules, type BetPlacement, type Hand, type HandInput, type MainBetRules, type SideBetDef, type Winner } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import { bankrollOf, latestCheckpointKrw, useApp } from '../store'
+import {
+  sessionRules,
+  type BetPlacement,
+  type Checkpoint,
+  type Hand,
+  type HandInput,
+  type MainBetRules,
+  type SideBetDef,
+  type Winner,
+} from '../types'
 import { cardsNeed, loserNeed, pairNeed, settleHand, totalNeed } from '../lib/settle'
 import { recommendedBet } from '../lib/bankroll'
-import { fmtBoth, fmtKrw, fmtSigned } from '../lib/money'
+import { getTheoreticalStats } from '../lib/baccarat'
+import { rankBets } from '../lib/recommend'
+import { quickOutcomes } from '../lib/quickOutcomes'
+import { logicalStreaks } from '../lib/road'
+import { fmtBoth, fmtKrw, fmtPct, fmtSigned } from '../lib/money'
 import { Confirm, Field, GhostBtn, Modal, NumInput, PrimaryBtn } from './ui'
 import HandEditModal from './HandEditModal'
 import RoadsModal from './RoadsModal'
@@ -12,43 +25,68 @@ import RecommendModal from './RecommendModal'
 const DEFAULT_CHIPS = [100_000, 500_000, 1_000_000, 5_000_000]
 
 export default function PlayScreen() {
-  const { session, hands, rate, settings, addHand, undoLast, endSession, updateSettings } = useApp()
+  const {
+    session,
+    hands,
+    checkpoints,
+    shoe,
+    rate,
+    settings,
+    addHand,
+    undoLast,
+    endSession,
+    updateSettings,
+    nextShoe,
+  } = useApp()
   const quick = settings.quickMode !== false
-  // 結果のみ記録モード(既定): ベット額の入力UIを出さず、精算は行わない(収支は終了時に手入力)
+  // 結果のみ記録モード(既定): ベット額の入力UIを出さず、資金はチェックポイント手入力で管理
   const betTracking = settings.betTracking === true
-  const [endKrwInput, setEndKrwInput] = useState<number | null>(null)
+
   const chips = settings.chipPresets?.length === 4 ? settings.chipPresets : DEFAULT_CHIPS
   const [chip, setChip] = useState(() => chips[0])
-  const [roadsOpen, setRoadsOpen] = useState(false)
-  const [recommendOpen, setRecommendOpen] = useState(false)
+  const [customChip, setCustomChip] = useState(false)
   const [bets, setBets] = useState<Record<string, number>>({})
   const [entryWinner, setEntryWinner] = useState<Winner | null>(null)
   const [pendingInput, setPendingInput] = useState<HandInput | null>(null)
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [confirmShoe, setConfirmShoe] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [customChip, setCustomChip] = useState(false)
+  const [roadsOpen, setRoadsOpen] = useState(false)
+  const [recommendOpen, setRecommendOpen] = useState(false)
+  const [cpOpen, setCpOpen] = useState(false)
+  const [endKrwInput, setEndKrwInput] = useState<number | null>(null)
   const [flash, setFlash] = useState<{ kind: 'win' | 'lose' | 'push'; key: number } | null>(null)
+  // リマインダー用の現在時刻(30秒ごとに更新)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
 
   if (!session) return null
-  const bankroll = bankrollOf(session, hands)
-  const curRate = rate?.rate ?? session.rate
   const rules = sessionRules(session)
   const enabledSides = session.sideBets.filter((d) => d.enabled)
+  const shoeHands = hands.filter((h) => (h.shoe ?? 1) === shoe)
+  const bankroll = betTracking
+    ? bankrollOf(session, hands)
+    : latestCheckpointKrw(checkpoints, session.startKrw)
+  const curRate = rate?.rate ?? session.rate
+  const lastCp = checkpoints.length ? checkpoints[checkpoints.length - 1] : null
+  const reminderMin = settings.checkpointReminderMin ?? 60
+  const needReminder =
+    !betTracking && reminderMin > 0 && lastCp != null && now - lastCp.ts >= reminderMin * 60_000
+
   const betList: BetPlacement[] = betTracking
     ? Object.entries(bets)
         .filter(([, v]) => v > 0)
         .map(([target, amount]) => ({ target, amount }))
     : []
   const betTotal = betList.reduce((s, b) => s + b.amount, 0)
-  const rec = recommendedBet(bankroll, settings.betPct, settings.chipUnit, session.tableMin)
 
   const addChip = (target: string) => setBets((b) => ({ ...b, [target]: (b[target] ?? 0) + chip }))
   const clearSpot = (target: string) => setBets((b) => ({ ...b, [target]: 0 }))
 
-  /**
-   * 結果ボタン → 補助入力の要否を判定し、不要なら即登録。
-   * クイック登録では省略可(optional)の入力を自動スキップし、精算に必須のものだけ尋ねる。
-   */
+  /** クイック登録では省略可(optional)の入力を自動スキップし、精算に必須のものだけ尋ねる */
   const adjNeed = (n: ReturnType<typeof totalNeed>) => (quick && n === 'optional' ? 'none' : n)
   const onResult = (winner: Winner) => {
     const needsSheet =
@@ -57,15 +95,23 @@ export default function PlayScreen() {
       adjNeed(loserNeed(winner, null, null, enabledSides, betList).total) !== 'none' ||
       adjNeed(pairNeed(enabledSides, betList)) !== 'none'
     if (!needsSheet) {
-      requestCommit({ winner, winnerTotal: null, winnerCards: null, loserTotal: null, loserCards: null, pPair: null, bPair: null })
+      requestCommit({
+        winner,
+        winnerTotal: null,
+        winnerCards: null,
+        loserTotal: null,
+        loserCards: null,
+        pPair: null,
+        bPair: null,
+      })
     } else {
       setEntryWinner(winner)
     }
   }
 
-  /** 誤操作防止:現在資金の10%超のベットは確認ダイアログ */
+  /** 誤操作防止:現在資金の10%超のベットは確認ダイアログ(ベット記録モードのみ) */
   const requestCommit = (input: HandInput) => {
-    if (betTotal > bankroll * 0.1 && betTotal > 0) {
+    if (betTracking && betTotal > bankroll * 0.1 && betTotal > 0) {
       setPendingInput(input)
     } else {
       commit(input)
@@ -73,67 +119,89 @@ export default function PlayScreen() {
   }
 
   const commit = (input: HandInput) => {
-    // 勝敗登録時の色フラッシュ(250ms・ベットありの場合のみ)
+    // 勝敗登録時の色フラッシュ+ハプティクス(対応端末のみ)
     if (betList.length > 0) {
       const net = settleHand(betList, input, { mainBets: rules, sideBets: session.sideBets })
       setFlash({ kind: net > 0 ? 'win' : net < 0 ? 'lose' : 'push', key: (flash?.key ?? 0) + 1 })
+    } else {
+      setFlash({ kind: 'push', key: (flash?.key ?? 0) + 1 })
+    }
+    try {
+      navigator.vibrate?.(15)
+    } catch {
+      /* 非対応端末は無視 */
     }
     void addHand(input, betList)
   }
 
+  const quicks = quickOutcomes(session.sideBets)
   const last = hands[hands.length - 1]
 
   return (
     <div className="flex min-h-full flex-col gap-3 p-3">
-      {/* 登録フラッシュ(全画面・操作は透過) */}
       {flash && <div key={flash.key} className={`pointer-events-none fixed inset-0 z-30 flash-${flash.kind}`} />}
 
-      {/* 推奨ベット額 */}
-      <div className="card-luxe p-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs text-ink-3">推奨ベット額({settings.betPct}%)</span>
-          <span className="num text-base font-bold text-gold-300">{fmtBoth(rec.amount, curRate)}</span>
-        </div>
-        {rec.leaveTable && (
-          <p className="mt-1 rounded bg-[#31090c] px-2 py-1 text-xs font-bold text-lose">
-            推奨額がテーブル最小額を下回りました:テーブル離脱を推奨します
-          </p>
-        )}
-        <p className="mt-1.5 text-[10px] leading-relaxed text-ink-3">
-          期待値がマイナスのゲームでは賭け金の最適化は成立しません。推奨額は資金保全と時間管理のための基準です。
-          サイドベットの控除率は本線より大幅に高くなります(理論値ボタンで確認)。
-        </p>
-      </div>
+      {/* 残高記録リマインダー */}
+      {needReminder && (
+        <button
+          className="press flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-gold-500 bg-gold-500/10 text-sm font-bold text-gold-300"
+          onClick={() => setCpOpen(true)}
+        >
+          ⏰ 前回の残高記録から{Math.floor((now - (lastCp?.ts ?? now)) / 60_000)}分 — 残高を記録しましょう
+        </button>
+      )}
 
-      {/* 履歴+ライブ統計(毎ハンド更新) */}
+      {/* 確率・推奨パネル(登録のたびに即時更新) */}
+      <ProbRecoPanel
+        rules={rules}
+        sideBets={session.sideBets}
+        shoeHands={shoeHands}
+        allHands={hands}
+        shoe={shoe}
+        bankroll={bankroll}
+        checkpoints={checkpoints}
+        startedAt={session.startedAt}
+        startKrw={session.startKrw}
+        stopLossKrw={session.stopLossKrw}
+        rate={curRate}
+        betPct={settings.betPct}
+        chipUnit={settings.chipUnit}
+        tableMin={session.tableMin}
+        betTracking={betTracking}
+        onOpenCheckpoint={() => setCpOpen(true)}
+        onOpenRecommend={() => setRecommendOpen(true)}
+      />
+
+      {/* 履歴 */}
       <div className="card-luxe flex-1">
-        <LiveStats hands={hands} />
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-xs font-bold text-ink-2">履歴({hands.length}ハンド)</span>
+          <span className="text-xs font-bold text-ink-2">
+            履歴(シュー{shoe}: {shoeHands.length} / 計{hands.length})
+          </span>
           <div className="flex gap-1.5">
             <button
-              className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
-              onClick={() => setRecommendOpen(true)}
+              className="press h-10 rounded-lg border border-gold-600/40 px-2.5 text-xs font-bold text-gold-300"
+              onClick={() => setConfirmShoe(true)}
             >
-              推奨
+              シュー切替
             </button>
             <button
-              className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
+              className="press h-10 rounded-lg border border-gold-600/40 px-2.5 text-xs font-bold text-gold-300"
               onClick={() => setRoadsOpen(true)}
             >
               罫線
             </button>
             {last && (
               <button
-                className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
+                className="press h-10 rounded-lg border border-gold-600/40 px-2.5 text-xs font-bold text-gold-300"
                 onClick={() => void undoLast()}
               >
-                ↩ 取消
+                ↩
               </button>
             )}
           </div>
         </div>
-        <div className="max-h-56 overflow-y-auto">
+        <div className="max-h-48 overflow-y-auto">
           {hands.length === 0 && <p className="px-3 pb-3 text-xs text-ink-3">まだ記録がありません</p>}
           {[...hands].reverse().map((h) => (
             <button
@@ -152,10 +220,7 @@ export default function PlayScreen() {
               <span className="flex-1 text-xs text-ink-2">
                 {h.winnerTotal != null && <span className="num">計{h.winnerTotal}</span>}
                 {h.winnerCards != null && <span className="num ml-1">{h.winnerCards}枚</span>}
-                {h.winner === 'B' && h.winnerTotal === 7 && h.winnerCards === 3 && (
-                  <span className="ml-1 font-bold text-gold-300">D7</span>
-                )}
-                <span className="ml-1 text-ink-3">{h.bets.length === 0 ? '見' : `${h.bets.length}件`}</span>
+                {(h.shoe ?? 1) !== shoe && <span className="ml-1 text-ink-3">シュー{h.shoe ?? 1}</span>}
               </span>
               <span className={`num text-sm font-bold ${h.net > 0 ? 'text-win' : h.net < 0 ? 'text-lose' : 'text-ink-3'}`}>
                 {h.bets.length === 0 ? '—' : fmtSigned(h.net)}
@@ -165,11 +230,13 @@ export default function PlayScreen() {
         </div>
       </div>
 
-      <GhostBtn onClick={() => setConfirmEnd(true)}>セッションを終了する</GhostBtn>
+      <div className="flex gap-2">
+        <GhostBtn onClick={() => setCpOpen(true)}>+ 残高を記録</GhostBtn>
+        <GhostBtn onClick={() => setConfirmEnd(true)}>セッション終了</GhostBtn>
+      </div>
 
       {/* 操作クラスタ(親指リーチ優先で画面下部に固定) */}
       <div className="sticky bottom-0 z-20 -mx-3 -mb-3 space-y-1.5 border-t border-gold-600/25 bg-base-950/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
-        {/* クイック登録トグル */}
         <div className="flex items-center justify-between">
           <button
             className={`press flex h-9 items-center gap-1 rounded-full border px-3 text-[11px] font-bold ${
@@ -183,67 +250,83 @@ export default function PlayScreen() {
             {quick ? '精算に必要な入力のみ・見はワンタップ' : '省略可の入力もすべて表示'}
           </span>
         </div>
+
         {/* ベット額の記録UI(設定「ベット額も記録」時のみ表示) */}
         {betTracking && (
           <>
-        {/* チップ選択 */}
-        <div className="flex gap-1.5">
-          {chips.map((c) => (
-            <button
-              key={c}
-              className={`num press h-11 flex-1 rounded-lg border text-xs font-bold ${
-                chip === c && !customChip ? 'btn-gold border-transparent' : 'border-base-700 bg-base-900 text-ink-2'
-              }`}
-              onClick={() => {
-                setChip(c)
-                setCustomChip(false)
-              }}
-            >
-              {c >= 10_000 ? `${c / 10_000}万` : fmtKrw(c)}
-            </button>
-          ))}
-          <button
-            className={`press h-11 flex-1 rounded-lg border text-xs font-bold ${
-              customChip ? 'btn-gold border-transparent' : 'border-base-700 bg-base-900 text-ink-2'
-            }`}
-            onClick={() => {
-              const v = prompt('チップ額(KRW)を入力')
-              const n = v ? Number(v.replace(/[^\d]/g, '')) : NaN
-              if (!Number.isNaN(n) && n > 0) {
-                setChip(n)
-                setCustomChip(true)
-              }
-            }}
-          >
-            {customChip ? `₩${chip.toLocaleString()}` : '直接入力'}
-          </button>
-        </div>
-
-        {/* ベットスポット(実テーブルと同じ配置) */}
-        <BetSpots
-          enabledSides={enabledSides}
-          tieLabel={`タイ ${rules.tiePayout}:1`}
-          tieEnabled={rules.tieEnabled !== false}
-          bets={bets}
-          onAdd={addChip}
-          onClear={clearSpot}
-        />
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-ink-3">
-            合計ベット:<span className="num font-bold text-ink">{fmtKrw(betTotal)}</span>
-            {betTotal === 0 && <span className="ml-1">(見:結果のみ記録)</span>}
-            {betTotal > bankroll && <span className="ml-1 font-bold text-lose">資金超過!</span>}
-          </span>
-          {betTotal > 0 && (
-            <button className="h-9 px-3 font-bold text-ink-3 underline" onClick={() => setBets({})}>
-              全クリア
-            </button>
-          )}
-        </div>
+            <div className="flex gap-1.5">
+              {chips.map((c) => (
+                <button
+                  key={c}
+                  className={`num press h-11 flex-1 rounded-lg border text-xs font-bold ${
+                    chip === c && !customChip ? 'btn-gold border-transparent' : 'border-base-700 bg-base-900 text-ink-2'
+                  }`}
+                  onClick={() => {
+                    setChip(c)
+                    setCustomChip(false)
+                  }}
+                >
+                  {c >= 10_000 ? `${c / 10_000}万` : fmtKrw(c)}
+                </button>
+              ))}
+              <button
+                className={`press h-11 flex-1 rounded-lg border text-xs font-bold ${
+                  customChip ? 'btn-gold border-transparent' : 'border-base-700 bg-base-900 text-ink-2'
+                }`}
+                onClick={() => {
+                  const v = prompt('チップ額(KRW)を入力')
+                  const n = v ? Number(v.replace(/[^\d]/g, '')) : NaN
+                  if (!Number.isNaN(n) && n > 0) {
+                    setChip(n)
+                    setCustomChip(true)
+                  }
+                }}
+              >
+                {customChip ? `₩${chip.toLocaleString()}` : '直接入力'}
+              </button>
+            </div>
+            <BetSpots
+              enabledSides={enabledSides}
+              tieLabel={`タイ ${rules.tiePayout}:1`}
+              tieEnabled={rules.tieEnabled !== false}
+              bets={bets}
+              onAdd={addChip}
+              onClear={clearSpot}
+            />
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-ink-3">
+                合計ベット:<span className="num font-bold text-ink">{fmtKrw(betTotal)}</span>
+                {betTotal === 0 && <span className="ml-1">(見:結果のみ記録)</span>}
+                {betTotal > bankroll && <span className="ml-1 font-bold text-lose">資金超過!</span>}
+              </span>
+              {betTotal > 0 && (
+                <button className="h-9 px-3 font-bold text-ink-3 underline" onClick={() => setBets({})}>
+                  全クリア
+                </button>
+              )}
+            </div>
           </>
         )}
 
-        {/* 結果ボタン(1ハンド3タップ以内の起点) */}
+        {/* サイドベット系ワンタップ結果(例: SD=P2枚7勝ち。B/P勝ちとしても自動集計) */}
+        {quicks.length > 0 && (
+          <div className="grid grid-cols-4 gap-1.5">
+            {quicks.slice(0, 8).map((q) => (
+              <button
+                key={q.id}
+                className={`press h-12 rounded-lg border text-sm font-bold ${
+                  q.side === 'B' ? 'border-banker text-banker' : 'border-player text-player'
+                } bg-base-900`}
+                title={q.name}
+                onClick={() => requestCommit(q.input)}
+              >
+                {q.short}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 結果ボタン */}
         <div className="grid grid-cols-3 gap-1.5">
           <button
             className="press h-20 rounded-xl bg-banker text-lg font-bold text-white shadow-lg shadow-banker/25"
@@ -282,7 +365,6 @@ export default function PlayScreen() {
         />
       )}
 
-      {/* 10%超確認 */}
       {pendingInput && (
         <Confirm
           message="高額ベットの確認"
@@ -293,6 +375,19 @@ export default function PlayScreen() {
             setPendingInput(null)
           }}
           onCancel={() => setPendingInput(null)}
+        />
+      )}
+
+      {confirmShoe && (
+        <Confirm
+          message={`シュー${shoe + 1}に切り替えますか?`}
+          detail="罫線とシュー内統計が新しくなります(これまでの記録はすべて保持されます)"
+          okLabel="切り替える"
+          onOk={() => {
+            setConfirmShoe(false)
+            nextShoe()
+          }}
+          onCancel={() => setConfirmShoe(false)}
         />
       )}
 
@@ -309,7 +404,6 @@ export default function PlayScreen() {
             onCancel={() => setConfirmEnd(false)}
           />
         ) : (
-          // 結果のみ記録モード:収支を残したい場合は終了資金を手入力(任意)
           <Modal
             title="セッションを終了"
             onClose={() => setConfirmEnd(false)}
@@ -318,7 +412,7 @@ export default function PlayScreen() {
                 className="h-12"
                 onClick={() => {
                   setConfirmEnd(false)
-                  void endSession(endKrwInput ?? undefined)
+                  void endSession(endKrwInput ?? (lastCp ? lastCp.krw : undefined))
                   setEndKrwInput(null)
                 }}
               >
@@ -327,74 +421,249 @@ export default function PlayScreen() {
             }
           >
             <div className="space-y-2 pb-2">
-              <Field label={`終了時の資金(KRW・任意)/ 開始 ${fmtKrw(session.startKrw)}`}>
+              <Field label={`終了時の資金(KRW)/ 開始 ${fmtKrw(session.startKrw)}`}>
                 <NumInput
                   value={endKrwInput}
                   onChange={setEndKrwInput}
-                  placeholder={session.startKrw.toLocaleString('ja-JP')}
+                  placeholder={(lastCp?.krw ?? session.startKrw).toLocaleString('ja-JP')}
                 />
               </Field>
               <p className="text-[10px] leading-relaxed text-ink-3">
-                入力すると開始資金との差がこのセッションの収支として記録されます(未入力の場合は±0)。
-                {hands.length}ハンドの出目記録はどちらでも保存されます。
+                未入力の場合は最新チェックポイント({lastCp ? fmtKrw(lastCp.krw) : '開始資金'})を終了資金として
+                収支を記録します。{hands.length}ハンドの出目記録はどちらでも保存されます。
               </p>
             </div>
           </Modal>
         ))}
 
+      {cpOpen && <CheckpointModal onClose={() => setCpOpen(false)} />}
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
-      {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}
+      {roadsOpen && <RoadsModal hands={shoeHands} onClose={() => setRoadsOpen(false)} />}
       {recommendOpen && <RecommendModal onClose={() => setRecommendOpen(false)} />}
     </div>
   )
 }
 
-/** セッションのライブ統計(毎ハンド自動更新):B/P/T回数・率・現在の連 */
-function LiveStats({ hands }: { hands: Hand[] }) {
-  if (hands.length === 0) return null
-  const n = hands.length
+/**
+ * 確率・推奨パネル(常設・毎ハンド即時更新)。
+ * 理論確率は固定であり、シュー内実績・連は事実表示のみ(次の結果の予測には使えない)。
+ */
+function ProbRecoPanel({
+  rules,
+  sideBets,
+  shoeHands,
+  allHands,
+  shoe,
+  bankroll,
+  checkpoints,
+  startedAt,
+  startKrw,
+  stopLossKrw,
+  rate,
+  betPct,
+  chipUnit,
+  tableMin,
+  betTracking,
+  onOpenCheckpoint,
+  onOpenRecommend,
+}: {
+  rules: MainBetRules
+  sideBets: SideBetDef[]
+  shoeHands: Hand[]
+  allHands: Hand[]
+  shoe: number
+  bankroll: number
+  checkpoints: Checkpoint[]
+  startedAt: number
+  startKrw: number
+  stopLossKrw: number | null
+  rate: number | null
+  betPct: number
+  chipUnit: number
+  tableMin: number
+  betTracking: boolean
+  onOpenCheckpoint: () => void
+  onOpenRecommend: () => void
+}) {
+  const t = getTheoreticalStats()
+  const best = useMemo(
+    () => rankBets(rules, sideBets)[0],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rules, JSON.stringify(sideBets.filter((d) => d.enabled).map((d) => d.id))],
+  )
+  const rec = recommendedBet(bankroll, betPct, chipUnit, tableMin)
+
+  // シュー内実績と連(事実表示のみ)
+  const n = shoeHands.length
   const c: Record<Winner, number> = { B: 0, P: 0, T: 0 }
-  for (const h of hands) c[h.winner]++
-  // 現在の連:直近がタイならタイの連、それ以外はタイを挟んでもB/Pの連として数える
-  const lastW = hands[n - 1].winner
+  for (const h of shoeHands) c[h.winner]++
+  const lastW = n ? shoeHands[n - 1].winner : null
   let streak = 0
-  if (lastW === 'T') {
-    for (let i = n - 1; i >= 0 && hands[i].winner === 'T'; i--) streak++
-  } else {
-    for (let i = n - 1; i >= 0; i--) {
-      const w = hands[i].winner
-      if (w === 'T') continue
-      if (w === lastW) streak++
-      else break
+  if (lastW) {
+    if (lastW === 'T') {
+      for (let i = n - 1; i >= 0 && shoeHands[i].winner === 'T'; i--) streak++
+    } else {
+      for (let i = n - 1; i >= 0; i--) {
+        const w = shoeHands[i].winner
+        if (w === 'T') continue
+        if (w === lastW) streak++
+        else break
+      }
     }
   }
-  const pct = (x: number) => `${((x / n) * 100).toFixed(0)}%`
-  const streakColor = lastW === 'B' ? 'text-banker' : lastW === 'P' ? 'text-player' : 'text-tie'
+  const maxStreak = Math.max(0, ...logicalStreaks(allHands))
+
+  // 資金:直近1時間の増減と時給換算
+  const hourAgo = Date.now() - 3_600_000
+  const cpBefore = [...checkpoints].reverse().find((x) => x.ts <= hourAgo) ?? checkpoints[0]
+  const hourDelta = cpBefore ? bankroll - cpBefore.krw : null
+  const elapsedH = Math.max(0.25, (Date.now() - startedAt) / 3_600_000)
+  const perHour = (bankroll - startKrw) / elapsedH
+  const lastCp = checkpoints.length ? checkpoints[checkpoints.length - 1] : null
+  const slClose = stopLossKrw != null && bankroll - stopLossKrw <= rec.amount * 3
+
+  const pct = (x: number) => (n > 0 ? `${((x / n) * 100).toFixed(0)}%` : '-')
+  const time = (ts: number) => {
+    const d = new Date(ts)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
   return (
-    <div className="num flex items-center gap-3 border-b border-base-800 px-3 py-1.5 text-[11px]">
-      <span className="font-bold text-banker">
-        B {c.B} <span className="font-normal text-ink-3">({pct(c.B)})</span>
-      </span>
-      <span className="font-bold text-player">
-        P {c.P} <span className="font-normal text-ink-3">({pct(c.P)})</span>
-      </span>
-      <span className="font-bold text-tie">
-        T {c.T} <span className="font-normal text-ink-3">({pct(c.T)})</span>
-      </span>
-      <span className={`ml-auto font-bold ${streakColor}`}>
-        {lastW === 'B' ? 'B' : lastW === 'P' ? 'P' : 'T'}
-        {streak}連
-      </span>
+    <div className="card-luxe space-y-1.5 p-3">
+      {/* 理論確率(固定) */}
+      <div className="num flex items-center gap-3 text-[11px] text-ink-2">
+        <span className="text-[10px] text-ink-3">理論(固定)</span>
+        <span className="font-bold text-banker">B {fmtPct(t.pBanker, 1)}</span>
+        <span className="font-bold text-player">P {fmtPct(t.pPlayer, 1)}</span>
+        <span className="font-bold text-tie">T {fmtPct(t.pTie, 1)}</span>
+        <button className="press ml-auto text-[10px] font-bold text-gold-300 underline" onClick={onOpenRecommend}>
+          期待値一覧
+        </button>
+      </div>
+      {/* ベストベットと推奨額 */}
+      <div className="flex items-baseline justify-between border-t border-base-800 pt-1.5">
+        <span className="text-xs">
+          <span className="text-ink-3">ベスト: </span>
+          <b className={best.target === 'B' ? 'text-banker' : best.target === 'P' ? 'text-player' : 'text-gold-300'}>
+            {best.name}
+          </b>
+          <span className="num ml-1 text-[10px] text-ink-3">(1万₩あたり −{fmtKrw(best.edge * 10_000)})</span>
+        </span>
+        <span className="num text-sm font-bold text-gold-300">{fmtBoth(rec.amount, rate)}</span>
+      </div>
+      {/* シュー内実績・連(事実のみ) */}
+      <div className="num flex items-center gap-3 border-t border-base-800 pt-1.5 text-[11px]">
+        <span className="text-[10px] text-ink-3">シュー{shoe}</span>
+        <span className="font-bold text-banker">B {c.B}<span className="font-normal text-ink-3">({pct(c.B)})</span></span>
+        <span className="font-bold text-player">P {c.P}<span className="font-normal text-ink-3">({pct(c.P)})</span></span>
+        <span className="font-bold text-tie">T {c.T}</span>
+        {lastW && (
+          <span className={`ml-auto font-bold ${lastW === 'B' ? 'text-banker' : lastW === 'P' ? 'text-player' : 'text-tie'}`}>
+            {lastW}{streak}連
+          </span>
+        )}
+        <span className="text-[10px] text-ink-3">最長{maxStreak}連</span>
+      </div>
+      {/* 資金(チェックポイント) */}
+      <div className="num flex items-center gap-2 border-t border-base-800 pt-1.5 text-[11px]">
+        <span className="text-[10px] text-ink-3">資金</span>
+        <span className="font-bold">{fmtKrw(bankroll)}</span>
+        {!betTracking && lastCp && <span className="text-[10px] text-ink-3">({time(lastCp.ts)}時点)</span>}
+        {hourDelta != null && (
+          <span className={`text-[10px] ${hourDelta > 0 ? 'text-win' : hourDelta < 0 ? 'text-lose' : 'text-ink-3'}`}>
+            1h {fmtSigned(hourDelta)}
+          </span>
+        )}
+        <span className={`text-[10px] ${perHour < 0 ? 'text-lose' : 'text-ink-3'}`}>時給 {fmtSigned(perHour)}</span>
+        {!betTracking && (
+          <button className="press ml-auto text-[10px] font-bold text-gold-300 underline" onClick={onOpenCheckpoint}>
+            +記録
+          </button>
+        )}
+      </div>
+      {slClose && (
+        <p className="rounded bg-[#31090c] px-2 py-1 text-[11px] font-bold text-lose">
+          ⚠ 撤退シグナル: ストップロスまで残り {fmtKrw(Math.max(0, bankroll - (stopLossKrw ?? 0)))}
+        </p>
+      )}
+      <p className="text-[9px] leading-relaxed text-ink-3">
+        実績・連は事実の記録であり、次のハンドの確率は変わりません(独立試行・予測不可)。
+      </p>
     </div>
   )
 }
 
+/** 資金チェックポイントの追加(残高+時刻、3操作以内) */
+function CheckpointModal({ onClose }: { onClose: () => void }) {
+  const { addCheckpoint, checkpoints, rate } = useApp()
+  const [krw, setKrw] = useState<number | null>(null)
+  const [timeStr, setTimeStr] = useState(() => {
+    const d = new Date()
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  })
+  const lastCp = checkpoints.length ? checkpoints[checkpoints.length - 1] : null
+
+  const save = () => {
+    if (krw == null || krw < 0) return
+    const now = new Date()
+    const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    // 時刻を変更していなければ秒付きの現在時刻を使う(同分の他CPより確実に後に並ぶ)
+    let ts = Date.now()
+    if (timeStr !== nowStr) {
+      const [h, m] = timeStr.split(':').map(Number)
+      if (!Number.isNaN(h) && !Number.isNaN(m)) {
+        now.setHours(h, m, 0, 0)
+        ts = now.getTime()
+      }
+    }
+    void addCheckpoint(krw, ts)
+    onClose()
+  }
+
+  return (
+    <Modal
+      title="残高を記録"
+      onClose={onClose}
+      footer={
+        <PrimaryBtn className="h-12" onClick={save} disabled={krw == null}>
+          登録
+        </PrimaryBtn>
+      }
+    >
+      <div className="space-y-3 pb-2">
+        <Field label="現在の残高(KRW)">
+          <NumInput
+            value={krw}
+            onChange={setKrw}
+            placeholder={lastCp ? lastCp.krw.toLocaleString('ja-JP') : ''}
+          />
+          {krw != null && rate && (
+            <span className="num mt-1 block text-right text-xs text-ink-2">{fmtBoth(krw, rate.rate)}</span>
+          )}
+        </Field>
+        <Field label="時刻">
+          <input
+            type="time"
+            className="num h-12 w-full rounded-lg border border-base-700 bg-base-950 px-3 text-ink focus:border-gold-500 focus:outline-none"
+            value={timeStr}
+            onChange={(e) => setTimeStr(e.target.value)}
+          />
+        </Field>
+        {lastCp && (
+          <p className="num text-[10px] text-ink-3">
+            前回: {fmtKrw(lastCp.krw)}(
+            {new Date(lastCp.ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })})
+          </p>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/** セッションのライブ統計は ProbRecoPanel に統合済み */
+
 /**
- * ベットスポット。実テーブル(Dragon Tiger Baccarat)と同じ配置:
- *   スモールドラゴン / ドラゴンタイガー / ビッグドラゴン
- *   スモールタイガー / タイ / ビッグタイガー
- *   バンカーペア / バンカー(2列分)
- *   プレイヤーペア / プレイヤー(2列分)
+ * ベットスポット。実テーブル(Dragon Tiger Baccarat)と同じ配置。
  * テンプレートに無い有効サイドベット(カスタム等)は最上段に3列で並べる。
  */
 const TABLE_LAYOUT: string[][] = [
@@ -415,15 +684,13 @@ function BetSpots({
 }: {
   enabledSides: SideBetDef[]
   tieLabel: string
-  /** false = 本線タイなしの台(TIE MAX等) */
   tieEnabled: boolean
   bets: Record<string, number>
   onAdd: (target: string) => void
   onClear: (target: string) => void
 }) {
   const sideById = new Map(enabledSides.map((d) => [d.id, d]))
-  const available = (id: string) =>
-    id === 'T' ? tieEnabled : id === 'B' || id === 'P' || sideById.has(id)
+  const available = (id: string) => (id === 'T' ? tieEnabled : id === 'B' || id === 'P' || sideById.has(id))
   const templateRows = TABLE_LAYOUT.map((r) => r.filter(available)).filter((r) => r.length > 0)
   const used = new Set(templateRows.flat())
   const extras = enabledSides.filter((d) => !used.has(d.id)).map((d) => d.id)
@@ -450,70 +717,30 @@ function BetSpots({
   return (
     <div className="space-y-1.5">
       {rows.map((row, ri) => {
-        // 主要スポット(B/P)を含む2枠行は3列中2列分に広げ、それ以外は枠数に合わせる
         const hasMain = row.includes('B') || row.includes('P')
         const colsClass =
           row.length === 1 ? 'grid-cols-1' : row.length === 2 && !hasMain ? 'grid-cols-2' : 'grid-cols-3'
         return (
-        <div key={ri} className={`grid ${colsClass} gap-1.5`}>
-          {row.map((id) => {
-            const m = meta(id)
-            const span = (id === 'B' || id === 'P') && row.length === 2 ? 'col-span-2' : ''
-            return (
-              <div key={id} className={span}>
-                <BetSpot
-                  label={m.label}
-                  color={m.color}
-                  small={m.small}
-                  amount={bets[id] ?? 0}
-                  onAdd={() => onAdd(id)}
-                  onClear={() => onClear(id)}
-                />
-              </div>
-            )
-          })}
-        </div>
+          <div key={ri} className={`grid ${colsClass} gap-1.5`}>
+            {row.map((id) => {
+              const m = meta(id)
+              const span = (id === 'B' || id === 'P') && row.length === 2 ? 'col-span-2' : ''
+              return (
+                <div key={id} className={span}>
+                  <BetSpot
+                    label={m.label}
+                    color={m.color}
+                    small={m.small}
+                    amount={bets[id] ?? 0}
+                    onAdd={() => onAdd(id)}
+                    onClear={() => onClear(id)}
+                  />
+                </div>
+              )
+            })}
+          </div>
         )
       })}
-    </div>
-  )
-}
-
-/** ペア有無の三値入力(null=未確認)。ベット中のサイドは選択必須 */
-function PairPicker({
-  label,
-  value,
-  onChange,
-  accent,
-  required,
-}: {
-  label: string
-  value: boolean | null
-  onChange: (v: boolean | null) => void
-  accent: 'player' | 'banker'
-  required: boolean
-}) {
-  const accentCls = accent === 'player' ? 'border-player text-player' : 'border-banker text-banker'
-  return (
-    <div className="mb-1.5 flex items-center gap-1.5">
-      <span className={`w-14 text-xs font-bold ${required ? '' : 'text-ink-2'}`}>
-        {label}
-        {required ? '*' : ''}
-      </span>
-      {([
-        [false, 'なし'],
-        [true, 'あり'],
-      ] as const).map(([v, t]) => (
-        <button
-          key={t}
-          className={`press h-12 flex-1 rounded-lg border text-sm font-bold ${
-            value === v ? `${accentCls} bg-base-800` : 'border-base-700 bg-base-950 text-ink-2'
-          }`}
-          onClick={() => onChange(value === v ? null : v)}
-        >
-          {t}
-        </button>
-      ))}
     </div>
   )
 }
@@ -565,7 +792,7 @@ function BetSpot({
 /**
  * 結果の補助入力シート。表示要否・必須/省略可は有効サイドベット構成と現在のベットから判定:
  * 勝者 → 勝ち側合計 → 勝ち側枚数 →(Dragon Tiger有効時のみ)負け側合計・枚数 → ペア有無。
- * 追加ステップが不要な構成では従来どおりタップと同時に自動登録される(3タップ以内を維持)。
+ * 追加ステップが不要な構成では従来どおりタップと同時に自動登録される。
  */
 function ResultSheet({
   winner,
@@ -580,7 +807,6 @@ function ResultSheet({
   sideBets: SideBetDef[]
   bets: BetPlacement[]
   rules: MainBetRules
-  /** クイック登録:省略可(optional)の入力を表示せず、必須のみで自動登録 */
   quick: boolean
   onCancel: () => void
   onCommit: (input: HandInput) => void
@@ -589,18 +815,16 @@ function ResultSheet({
   const [cards, setCards] = useState<2 | 3 | null>(null)
   const [loserTotal, setLoserTotal] = useState<number | null>(null)
   const [loserCards, setLoserCards] = useState<2 | 3 | null>(null)
-  // ペアは三値(null=未確認)。ベット中のサイドは選択必須
   const [pPair, setPPair] = useState<boolean | null>(null)
   const [bPair, setBPair] = useState<boolean | null>(null)
 
   type Need = ReturnType<typeof pairNeed>
-  const adj = (n: Need): Need => (quick && n === 'optional' ? 'none' : n)
+  const adj = (nd: Need): Need => (quick && nd === 'optional' ? 'none' : nd)
   const tn = adj(totalNeed(winner, sideBets, bets, rules))
   const cn = adj(cardsNeed(winner, total, sideBets, bets, rules))
   const lnRaw = loserNeed(winner, total, loserTotal, sideBets, bets)
   const ln = { total: adj(lnRaw.total), cards: adj(lnRaw.cards) }
   const pn = adj(pairNeed(sideBets, bets))
-  // ベット中ペアの側だけ必須にする(精算に不要な側は強制しない)
   const pairBetOn = (side: 'P' | 'B') =>
     sideBets.some(
       (d) =>
@@ -625,28 +849,26 @@ function ResultSheet({
     ...over,
   })
 
-  /** 追加ステップ(負け側・ペア)が無ければタップと同時に登録 */
   const autoCommitOk = (t: number | null) =>
     pn === 'none' && adj(loserNeed(winner, t, null, sideBets, bets).total) === 'none'
 
-  const pickTotal = (n: number) => {
-    setTotal(n)
+  const pickTotal = (nv: number) => {
+    setTotal(nv)
     setCards(null)
     setLoserTotal(null)
     setLoserCards(null)
-    if (adj(cardsNeed(winner, n, sideBets, bets, rules)) === 'none' && autoCommitOk(n)) {
-      onCommit(build({ winnerTotal: n, winnerCards: null }))
+    if (adj(cardsNeed(winner, nv, sideBets, bets, rules)) === 'none' && autoCommitOk(nv)) {
+      onCommit(build({ winnerTotal: nv, winnerCards: null }))
     }
   }
 
-  const pickCards = (c: 2 | 3) => {
-    setCards(c)
+  const pickCards = (cv: 2 | 3) => {
+    setCards(cv)
     if (autoCommitOk(total)) {
-      onCommit(build({ winnerCards: c }))
+      onCommit(build({ winnerCards: cv }))
     }
   }
 
-  // 手動登録ボタンの活性判定(必須項目がすべて入力済みか)
   const missing: string[] = []
   if (tn === 'required' && total == null) missing.push('勝利合計値')
   if (cn === 'required' && cards == null) missing.push('枚数')
@@ -668,17 +890,14 @@ function ResultSheet({
           <div className="flex items-center justify-between">
             <span className={`text-lg font-bold ${color}`}>{name}勝ち</span>
             <div className="flex items-center gap-1">
-              {tn === 'optional' &&
-                total == null &&
-                !showRegister &&
-                cardsNeed(winner, null, sideBets, bets, rules) === 'none' && (
-                  <button
-                    className="press h-12 rounded-lg border border-base-700 px-3 text-sm text-ink-2"
-                    onClick={() => onCommit(build({ winnerTotal: null, winnerCards: null }))}
-                  >
-                    合計値を省略
-                  </button>
-                )}
+              {tn === 'optional' && total == null && !showRegister && (
+                <button
+                  className="press h-12 rounded-lg border border-base-700 px-3 text-sm text-ink-2"
+                  onClick={() => onCommit(build({ winnerTotal: null, winnerCards: null }))}
+                >
+                  合計値を省略
+                </button>
+              )}
               <button className="h-12 px-3 text-sm text-ink-3" onClick={onCancel}>
                 キャンセル
               </button>
@@ -692,22 +911,22 @@ function ResultSheet({
                 {tn === 'required' ? '(必須)' : '(省略可)'}
               </span>
               <div className="grid grid-cols-5 gap-1.5">
-                {totals.map((n) => (
+                {totals.map((nv) => (
                   <button
-                    key={n}
+                    key={nv}
                     className={`num press h-14 rounded-lg border text-lg font-bold ${
-                      total === n ? 'btn-gold border-transparent' : 'border-base-700 bg-base-950'
+                      total === nv ? 'btn-gold border-transparent' : 'border-base-700 bg-base-950'
                     }`}
-                    onClick={() => pickTotal(n)}
+                    onClick={() => pickTotal(nv)}
                   >
-                    {n}
+                    {nv}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {cn !== 'none' && (
+          {total != null && cn !== 'none' && (
             <div>
               <span className="mb-1 block text-xs font-bold text-ink-2">
                 {isD7Choice
@@ -743,25 +962,25 @@ function ResultSheet({
             </div>
           )}
 
-          {ln.total !== 'none' && (
+          {total != null && ln.total !== 'none' && (
             <div>
               <span className="mb-1 block text-xs font-bold text-ink-2">
                 負け側({winner === 'P' ? 'バンカー' : 'プレイヤー'})の合計値
                 {ln.total === 'required' ? '(必須・ドラゴンタイガー判定)' : '(省略可)'}
               </span>
               <div className="grid grid-cols-5 gap-1.5">
-                {Array.from({ length: total ?? 10 }, (_, n) => (
+                {Array.from({ length: total }, (_, nv) => (
                   <button
-                    key={n}
+                    key={nv}
                     className={`num press h-12 rounded-lg border text-base font-bold ${
-                      loserTotal === n ? 'btn-gold border-transparent' : 'border-base-700 bg-base-950'
+                      loserTotal === nv ? 'btn-gold border-transparent' : 'border-base-700 bg-base-950'
                     }`}
                     onClick={() => {
-                      setLoserTotal(n)
+                      setLoserTotal(nv)
                       setLoserCards(null)
                     }}
                   >
-                    {n}
+                    {nv}
                   </button>
                 ))}
               </div>
@@ -774,15 +993,15 @@ function ResultSheet({
                 負け側の枚数{ln.cards === 'required' ? '(必須・合計枚数で配当が変化)' : '(省略可)'}
               </span>
               <div className="grid grid-cols-2 gap-1.5">
-                {([2, 3] as const).map((c) => (
+                {([2, 3] as const).map((cv) => (
                   <button
-                    key={c}
+                    key={cv}
                     className={`press h-12 rounded-lg border bg-base-950 text-base font-bold ${
-                      loserCards === c ? 'btn-gold border-transparent' : 'border-base-700'
+                      loserCards === cv ? 'btn-gold border-transparent' : 'border-base-700'
                     }`}
-                    onClick={() => setLoserCards(c)}
+                    onClick={() => setLoserCards(cv)}
                   >
-                    {c}枚{cards != null ? `(両者計${cards + c}枚)` : ''}
+                    {cv}枚{cards != null ? `(両者計${cards + cv}枚)` : ''}
                   </button>
                 ))}
               </div>
@@ -792,24 +1011,37 @@ function ResultSheet({
           {pn !== 'none' && (
             <div>
               <span className="mb-1 block text-xs font-bold text-ink-2">
-                ペア有無(最初の2枚が同ランク)
-                {pn === 'required' ? '(ベット中のサイドは必須)' : '(省略可)'}
+                ペア有無(最初の2枚が同ランク){pn === 'required' ? '(ベット中の側は必須)' : ''}
               </span>
-              <PairPicker label="Pペア" value={pPair} onChange={setPPair} accent="player" required={pairBetOn('P')} />
-              <PairPicker label="Bペア" value={bPair} onChange={setBPair} accent="banker" required={pairBetOn('B')} />
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  className={`press h-12 rounded-lg border text-sm font-bold ${
+                    pPair ? 'border-player bg-base-800 text-player' : 'border-base-700 bg-base-950 text-ink-2'
+                  }`}
+                  onClick={() => setPPair((v) => !v)}
+                >
+                  Pペア {pPair ? 'あり' : 'なし'}
+                </button>
+                <button
+                  className={`press h-12 rounded-lg border text-sm font-bold ${
+                    bPair ? 'border-banker bg-base-800 text-banker' : 'border-base-700 bg-base-950 text-ink-2'
+                  }`}
+                  onClick={() => setBPair((v) => !v)}
+                >
+                  Bペア {bPair ? 'あり' : 'なし'}
+                </button>
+              </div>
             </div>
           )}
 
           {showRegister && (
-            <div>
-              <button
-                className="btn-gold press h-14 w-full rounded-xl text-base font-bold disabled:opacity-40"
-                disabled={missing.length > 0}
-                onClick={() => onCommit(build({}))}
-              >
-                {missing.length > 0 ? `${missing.join('・')}を入力してください` : 'このハンドを登録'}
-              </button>
-            </div>
+            <button
+              className="btn-gold press h-14 w-full rounded-xl text-base font-bold disabled:opacity-40"
+              disabled={missing.length > 0}
+              onClick={() => onCommit(build({}))}
+            >
+              {missing.length > 0 ? `${missing.join('・')}を入力してください` : 'このハンドを登録'}
+            </button>
           )}
         </div>
       </div>

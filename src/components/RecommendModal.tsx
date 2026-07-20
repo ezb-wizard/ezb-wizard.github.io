@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { bankrollOf, useApp } from '../store'
+import { bankrollOf, latestCheckpointKrw, useApp } from '../store'
 import { sessionRules } from '../types'
 import { rankBets } from '../lib/recommend'
 import { recommendedBet } from '../lib/bankroll'
@@ -11,7 +11,7 @@ import { Modal } from './ui'
  * どのベットが最も損しにくいか(控除率)と、資金保全上の適正額を即答する。
  */
 export default function RecommendModal({ onClose }: { onClose: () => void }) {
-  const { session, hands, rate, settings } = useApp()
+  const { session, hands, checkpoints, rate, settings } = useApp()
   const rules = session ? sessionRules(session) : null
   const ranked = useMemo(
     () => (session && rules ? rankBets(rules, session.sideBets) : []),
@@ -20,7 +20,8 @@ export default function RecommendModal({ onClose }: { onClose: () => void }) {
   )
   if (!session || !rules || ranked.length === 0) return null
 
-  const bankroll = bankrollOf(session, hands)
+  const bankroll =
+    settings.betTracking === true ? bankrollOf(session, hands) : latestCheckpointKrw(checkpoints, session.startKrw)
   const rec = recommendedBet(bankroll, settings.betPct, settings.chipUnit, session.tableMin)
   const best = ranked[0]
   const curRate = rate?.rate ?? session.rate

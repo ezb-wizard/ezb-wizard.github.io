@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { bankrollOf, useApp } from './store'
+import { bankrollOf, latestCheckpointKrw, useApp } from './store'
 import Header from './components/Header'
 import TabBar from './components/TabBar'
 import TheoryModal from './components/TheoryModal'
@@ -13,7 +13,7 @@ import { fmtBoth, fmtDateTime, fmtKrw, fmtSigned, krwToJpy, fmtJpy } from './lib
 import { Modal, PrimaryBtn, GhostBtn } from './components/ui'
 
 export default function App() {
-  const { ready, init, screen, session, hands, rate, lastSummary, clearSummary, endSession, settings } = useApp()
+  const { ready, init, screen, session, hands, checkpoints, rate, lastSummary, clearSummary, endSession, settings } = useApp()
   const [slDismissed, setSlDismissed] = useState(false)
   const [tpDismissed, setTpDismissed] = useState(false)
 
@@ -38,7 +38,11 @@ export default function App() {
     )
   }
 
-  const bankroll = session ? bankrollOf(session, hands) : null
+  const bankroll = session
+    ? settings.betTracking === true
+      ? bankrollOf(session, hands)
+      : latestCheckpointKrw(checkpoints, session.startKrw)
+    : null
   const slHit =
     session != null && bankroll != null && session.stopLossKrw != null && bankroll <= session.stopLossKrw
   const tpHit =

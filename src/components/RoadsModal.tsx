@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useApp } from '../store'
-import type { Winner } from '../types'
+import type { Hand, Winner } from '../types'
 import RoadsPanel, { ProbPanel } from './RoadsPanel'
 import { Confirm, GhostBtn, Modal, PrimaryBtn } from './ui'
 
 /** プレイ中に罫線と確率をすぐ確認できるモーダル(途中参加のまとめ入力つき) */
-export default function RoadsModal({ onClose }: { onClose: () => void }) {
-  const { session, hands, addHandsBulk } = useApp()
+export default function RoadsModal({ hands, onClose }: { hands: Hand[]; onClose: () => void }) {
+  const { session, addHandsBulk } = useApp()
   const [bulkOpen, setBulkOpen] = useState(false)
   const [seq, setSeq] = useState<Winner[]>([])
   const [confirmBulk, setConfirmBulk] = useState(false)

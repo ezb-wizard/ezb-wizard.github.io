@@ -1,12 +1,16 @@
 import { useState } from 'react'
-import { bankrollOf, useApp } from '../store'
+import { bankrollOf, latestCheckpointKrw, useApp } from '../store'
 import { fmtDateTime, fmtKrw, fmtSigned, krwToJpy, fmtJpy } from '../lib/money'
 import { lossesToStopLoss, recommendedBet } from '../lib/bankroll'
 import { useCountUp } from '../lib/useCountUp'
 
 export default function Header() {
-  const { rate, session, hands, settings, setTheoryOpen } = useApp()
-  const bankroll = session ? bankrollOf(session, hands) : null
+  const { rate, session, hands, checkpoints, settings, setTheoryOpen } = useApp()
+  const bankroll = session
+    ? settings.betTracking === true
+      ? bankrollOf(session, hands)
+      : latestCheckpointKrw(checkpoints, session.startKrw)
+    : null
   const [logoOk, setLogoOk] = useState(true)
 
   return (

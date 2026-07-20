@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import { EZ_MAIN_BETS, type Hand, type RateInfo, type Session, type Settings } from '../types'
+import { EZ_MAIN_BETS, type Checkpoint, type Hand, type RateInfo, type Session, type Settings } from '../types'
 
 interface KV {
   key: string
@@ -9,6 +9,7 @@ interface KV {
 class EZBaccaratDB extends Dexie {
   sessions!: Table<Session, number>
   hands!: Table<Hand, number>
+  checkpoints!: Table<Checkpoint, number>
   kv!: Table<KV, string>
 
   constructor() {
@@ -43,6 +44,22 @@ class EZBaccaratDB extends Dexie {
             if (h.loserCards === undefined) h.loserCards = null
             if (h.pPair === undefined) h.pPair = null
             if (h.bPair === undefined) h.bPair = null
+          })
+      })
+    // v3: 資金チェックポイント(時刻+残高)とシュー番号
+    this.version(3)
+      .stores({
+        sessions: '++id, startedAt, endedAt',
+        hands: '++id, sessionId, [sessionId+seq], ts',
+        checkpoints: '++id, sessionId, ts',
+        kv: 'key',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('hands')
+          .toCollection()
+          .modify((h: Hand) => {
+            if (h.shoe === undefined) h.shoe = 1
           })
       })
   }
