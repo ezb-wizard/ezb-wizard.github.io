@@ -7,6 +7,7 @@ import { fmtBoth, fmtKrw, fmtSigned } from '../lib/money'
 import { Confirm, GhostBtn } from './ui'
 import HandEditModal from './HandEditModal'
 import RoadsModal from './RoadsModal'
+import RecommendModal from './RecommendModal'
 
 const DEFAULT_CHIPS = [100_000, 500_000, 1_000_000, 5_000_000]
 
@@ -16,6 +17,7 @@ export default function PlayScreen() {
   const chips = settings.chipPresets?.length === 4 ? settings.chipPresets : DEFAULT_CHIPS
   const [chip, setChip] = useState(() => chips[0])
   const [roadsOpen, setRoadsOpen] = useState(false)
+  const [recommendOpen, setRecommendOpen] = useState(false)
   const [bets, setBets] = useState<Record<string, number>>({})
   const [entryWinner, setEntryWinner] = useState<Winner | null>(null)
   const [pendingInput, setPendingInput] = useState<HandInput | null>(null)
@@ -104,6 +106,12 @@ export default function PlayScreen() {
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-xs font-bold text-ink-2">履歴({hands.length}ハンド)</span>
           <div className="flex gap-1.5">
+            <button
+              className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
+              onClick={() => setRecommendOpen(true)}
+            >
+              推奨
+            </button>
             <button
               className="press h-10 rounded-lg border border-gold-600/40 px-3 text-xs font-bold text-gold-300"
               onClick={() => setRoadsOpen(true)}
@@ -293,6 +301,7 @@ export default function PlayScreen() {
 
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
       {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}
+      {recommendOpen && <RecommendModal onClose={() => setRecommendOpen(false)} />}
     </div>
   )
 }
