@@ -17,6 +17,11 @@ export interface MainBetRules {
   bankerPayout: number
   bankerRule: 'ez' | 'commission' | 'super6'
   tiePayout: number
+  /**
+   * false = 本線タイベットが存在しないテーブル(PARADISEのTIE MAX等、
+   * タイは合計値レンジ別のサイドベットとして提供される)。未設定 = あり
+   */
+  tieEnabled?: boolean
 }
 
 export const EZ_MAIN_BETS: MainBetRules = {

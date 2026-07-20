@@ -5,8 +5,8 @@ export const CASINO_NAMES: Record<CasinoId, string> = {
   INSPIRE: 'INSPIRE 仁川',
 }
 
-/** Small/Big Dragon・Tiger(両カジノ共通の的中条件) */
-function dragonTigerFamily(): SideBetDef[] {
+/** Small/Big Dragon・Tiger(的中条件は共通、タイガー配当はカジノごとに異なる) */
+function dragonTigerFamily(smallTigerPayout: number, bigTigerPayout: number): SideBetDef[] {
   return [
     {
       id: 'SMALL_DRAGON',
@@ -28,7 +28,7 @@ function dragonTigerFamily(): SideBetDef[] {
       id: 'SMALL_TIGER',
       name: 'スモールタイガー',
       side: 'B',
-      rules: [{ totals: [6], cards: '2', payout: 22 }],
+      rules: [{ totals: [6], cards: '2', payout: smallTigerPayout }],
       enabled: true,
       preset: true,
     },
@@ -36,7 +36,7 @@ function dragonTigerFamily(): SideBetDef[] {
       id: 'BIG_TIGER',
       name: 'ビッグタイガー',
       side: 'B',
-      rules: [{ totals: [6], cards: '3', payout: 50 }],
+      rules: [{ totals: [6], cards: '3', payout: bigTigerPayout }],
       enabled: true,
       preset: true,
     },
@@ -83,7 +83,7 @@ export function casinoPreset(id: CasinoId): CasinoConfig {
           enabled: false, // 台により有無が異なるためデフォルトOFF
           preset: true,
         },
-        ...dragonTigerFamily(),
+        ...dragonTigerFamily(22, 50),
         {
           id: 'DRAGON_TIGER',
           name: 'ドラゴンタイガー',
@@ -96,13 +96,29 @@ export function casinoPreset(id: CasinoId): CasinoConfig {
       ],
     }
   }
-  // PARADISE(仁川)Dragon Tiger Baccarat
+  // PARADISE(仁川)Dragon Tiger Baccarat(2026-07 実テーブル確認値)
   return {
-    // タイガー系テーブルの標準:ノーコミッション・バンカー6勝ちは半額(0.5倍)払い
-    mainBets: { playerPayout: 1, bankerPayout: 1, bankerRule: 'super6', tiePayout: 8 },
+    // ノーコミッション(バンカー6勝ちは半額)。本線タイなし(タイはTIE MAXの2スポットで提供)
+    mainBets: { playerPayout: 1, bankerPayout: 1, bankerRule: 'super6', tiePayout: 8, tieEnabled: false },
     sideBets: [
+      {
+        id: 'TIE_MAX_06',
+        name: 'タイ0〜6',
+        side: 'T',
+        rules: [{ totals: [0, 1, 2, 3, 4, 5, 6], cards: 'any', payout: 12 }],
+        enabled: true,
+        preset: true,
+      },
+      {
+        id: 'TIE_MAX_79',
+        name: 'タイ7〜9',
+        side: 'T',
+        rules: [{ totals: [7, 8, 9], cards: 'any', payout: 17 }],
+        enabled: true,
+        preset: true,
+      },
       ...pairBets(),
-      ...dragonTigerFamily(),
+      ...dragonTigerFamily(15, 30),
       {
         id: 'DRAGON_TIGER',
         name: 'ドラゴンタイガー',

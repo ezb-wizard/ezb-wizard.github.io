@@ -147,6 +147,10 @@ export interface TheoreticalStats {
   pBanker: number
   pPlayer: number
   pTie: number
+  /** タイのうち合計0〜6(TIE MAX低配当側) */
+  pTie06: number
+  /** タイのうち合計7〜9(TIE MAX高配当側) */
+  pTie79: number
   /** ドラゴン7(バンカー3枚合計7勝ち) */
   pDragon7: number
   /** バンカーが合計6で勝つ確率(スーパー6式の半額払い判定用) */
@@ -172,6 +176,7 @@ export function getTheoreticalStats(): TheoreticalStats {
   let pB = 0
   let pP = 0
   let pT = 0
+  let pT79 = 0
   let pD7 = 0
   let pB6 = 0
   let pP8 = 0
@@ -187,6 +192,7 @@ export function getTheoreticalStats(): TheoreticalStats {
       if (b.pTotal === 8 && b.pCards === 3) pP8 += b.prob
     } else {
       pT += b.prob
+      if (b.pTotal >= 7) pT79 += b.prob
     }
     if (b.pPair) pPP += b.prob
     if (b.pPair || b.bPair) pEP += b.prob
@@ -195,6 +201,8 @@ export function getTheoreticalStats(): TheoreticalStats {
     pBanker: pB,
     pPlayer: pP,
     pTie: pT,
+    pTie06: pT - pT79,
+    pTie79: pT79,
     pDragon7: pD7,
     pBanker6: pB6,
     pPanda8: pP8,

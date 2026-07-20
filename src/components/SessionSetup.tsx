@@ -208,17 +208,29 @@ export default function SessionSetup() {
             />
             <span className="text-xs text-ink-2">:1</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-20 text-xs text-ink-2">タイ</span>
-            <Seg
-              className="flex-1"
-              options={[
-                { value: 8, label: '8:1' },
-                { value: 9, label: '9:1' },
-              ]}
-              value={mainBets.tiePayout as 8 | 9}
-              onChange={(v) => setMainBets((m) => ({ ...m, tiePayout: v }))}
-            />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-20 text-xs text-ink-2">タイ本線</span>
+              <Seg
+                className="flex-1"
+                options={[
+                  { value: 8, label: '8:1' },
+                  { value: 9, label: '9:1' },
+                  { value: 0, label: 'なし' },
+                ]}
+                value={mainBets.tieEnabled === false ? 0 : mainBets.tiePayout === 9 ? 9 : 8}
+                onChange={(v) =>
+                  setMainBets((m) =>
+                    v === 0 ? { ...m, tieEnabled: false } : { ...m, tieEnabled: true, tiePayout: v },
+                  )
+                }
+              />
+            </div>
+            {mainBets.tieEnabled === false && (
+              <p className="mt-1 text-[10px] text-ink-3">
+                本線タイなしの台(タイはサイドベットの「タイ0〜6 / タイ7〜9」等で賭けます)
+              </p>
+            )}
           </div>
           <p className="num text-right text-[10px] text-ink-3">
             控除率:B {fmtPct(edges.banker)} / P {fmtPct(edges.player)} / T {fmtPct(edges.tie)}

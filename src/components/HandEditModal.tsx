@@ -60,7 +60,7 @@ export default function HandEditModal({ handId, onClose }: { handId: number; onC
   const targets: { id: string; name: string }[] = [
     { id: 'B', name: 'バンカー' },
     { id: 'P', name: 'プレイヤー' },
-    { id: 'T', name: `タイ ${rules.tiePayout}:1` },
+    ...(rules.tieEnabled !== false ? [{ id: 'T', name: `タイ ${rules.tiePayout}:1` }] : []),
     ...enabledSides.map((d) => ({ id: d.id, name: d.name })),
   ]
 

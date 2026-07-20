@@ -69,7 +69,9 @@ export function TheoryContent({ rules, sideBets }: { rules: MainBetRules; sideBe
             }
           />
           <Row name="プレイヤー" prob={t.pPlayer} edge={edges.player} note={`${rules.playerPayout}:1`} />
-          <Row name={`タイ(${rules.tiePayout}:1)`} prob={t.pTie} edge={edges.tie} note={`${rules.tiePayout}:1`} />
+          {rules.tieEnabled !== false && (
+            <Row name={`タイ(${rules.tiePayout}:1)`} prob={t.pTie} edge={edges.tie} note={`${rules.tiePayout}:1`} />
+          )}
           {rules.bankerRule === 'ez' && (
             <Row name="ドラゴン7(参考)" prob={t.pDragon7} edge={t.edgeDragon7} note="40:1" />
           )}

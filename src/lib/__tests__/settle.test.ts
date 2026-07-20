@@ -248,3 +248,28 @@ describe('補助入力の要否判定', () => {
     expect(cardsNeed('B', 6, sides, [], COMMISSION)).toBe('optional')
   })
 })
+
+describe('TIE MAX(タイ合計値レンジ別の独立ベット・PARADISE)', () => {
+  const paradise: SettleContext = {
+    mainBets: casinoPreset('PARADISE').mainBets,
+    sideBets: casinoPreset('PARADISE').sideBets,
+  }
+  it('タイ0〜6は12:1、タイ7〜9は17:1(レンジ外・タイ以外は没収)', () => {
+    expect(settleBet({ target: 'TIE_MAX_06', amount: 10000 }, tie(0), paradise)).toBe(120000)
+    expect(settleBet({ target: 'TIE_MAX_06', amount: 10000 }, tie(6), paradise)).toBe(120000)
+    expect(settleBet({ target: 'TIE_MAX_06', amount: 10000 }, tie(8), paradise)).toBe(-10000)
+    expect(settleBet({ target: 'TIE_MAX_79', amount: 10000 }, tie(7), paradise)).toBe(170000)
+    expect(settleBet({ target: 'TIE_MAX_79', amount: 10000 }, tie(9), paradise)).toBe(170000)
+    expect(settleBet({ target: 'TIE_MAX_79', amount: 10000 }, tie(5), paradise)).toBe(-10000)
+    expect(settleBet({ target: 'TIE_MAX_06', amount: 10000 }, bWin(5, 2), paradise)).toBe(-10000)
+  })
+  it('タイ発生時のB/Pプッシュは従来どおり', () => {
+    expect(settleBet({ target: 'B', amount: 10000 }, tie(8), paradise)).toBe(0)
+  })
+  it('TIE MAXにベット中はタイ勝ちの合計値が必須', () => {
+    const sides = casinoPreset('PARADISE').sideBets
+    expect(totalNeed('T', sides, [{ target: 'TIE_MAX_06', amount: 10000 }], paradise.mainBets)).toBe('required')
+    expect(totalNeed('T', sides, [], paradise.mainBets)).toBe('optional')
+    expect(totalNeed('T', [], [{ target: 'T', amount: 10000 }], EZ8)).toBe('none')
+  })
+})

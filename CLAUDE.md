@@ -26,6 +26,7 @@ EZバカラ専用セッション記録・資金管理PWA。韓国カジノ(PARAD
 
 - `MainBetRules`: バンカー本線 `'ez'`(1:1・D7プッシュ)/ `'super6'`(1:1・バンカー6勝ちは0.5倍。
   タイガー系テーブル標準・PARADISE初期値)/ `'commission'`(bankerPayout倍)+ player/tie配当。
+  `tieEnabled: false` = 本線タイなしの台(PARADISEはタイをTIE_MAX_06/79サイドベットで提供)。
   ez/super6ではバンカー勝ちの合計値入力が必須(totalNeed)
 - `SideBetDef`: `pairTarget`(P/B/either = ペア系、勝者と無関係)または `side`+`rules[]`。
   `SideBetRule` = totals × cards × loserTotals(負け側合計・Dragon Tiger)× totalCards(両者合計枚数・PARADISE DT 4/5/6枚)× payout

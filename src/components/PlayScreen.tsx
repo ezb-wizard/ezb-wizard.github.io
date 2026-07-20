@@ -186,7 +186,8 @@ export default function PlayScreen() {
         {/* ベットスポット(実テーブルと同じ配置) */}
         <BetSpots
           enabledSides={enabledSides}
-          tiePayout={rules.tiePayout}
+          tieLabel={`タイ ${rules.tiePayout}:1`}
+          tieEnabled={rules.tieEnabled !== false}
           bets={bets}
           onAdd={addChip}
           onClear={clearSpot}
@@ -286,25 +287,30 @@ export default function PlayScreen() {
 const TABLE_LAYOUT: string[][] = [
   ['SMALL_DRAGON', 'DRAGON_TIGER', 'BIG_DRAGON'],
   ['SMALL_TIGER', 'T', 'BIG_TIGER'],
+  ['TIE_MAX_06', 'TIE_MAX_79'],
   ['B_PAIR', 'B'],
   ['P_PAIR', 'P'],
 ]
 
 function BetSpots({
   enabledSides,
-  tiePayout,
+  tieLabel,
+  tieEnabled,
   bets,
   onAdd,
   onClear,
 }: {
   enabledSides: SideBetDef[]
-  tiePayout: number
+  tieLabel: string
+  /** false = 本線タイなしの台(TIE MAX等) */
+  tieEnabled: boolean
   bets: Record<string, number>
   onAdd: (target: string) => void
   onClear: (target: string) => void
 }) {
   const sideById = new Map(enabledSides.map((d) => [d.id, d]))
-  const available = (id: string) => id === 'B' || id === 'P' || id === 'T' || sideById.has(id)
+  const available = (id: string) =>
+    id === 'T' ? tieEnabled : id === 'B' || id === 'P' || sideById.has(id)
   const templateRows = TABLE_LAYOUT.map((r) => r.filter(available)).filter((r) => r.length > 0)
   const used = new Set(templateRows.flat())
   const extras = enabledSides.filter((d) => !used.has(d.id)).map((d) => d.id)
@@ -315,7 +321,7 @@ function BetSpots({
   const meta = (id: string): { label: string; color: 'banker' | 'player' | 'tie' | 'gold'; small: boolean } => {
     if (id === 'B') return { label: 'バンカー', color: 'banker', small: false }
     if (id === 'P') return { label: 'プレイヤー', color: 'player', small: false }
-    if (id === 'T') return { label: `タイ ${tiePayout}:1`, color: 'tie', small: true }
+    if (id === 'T') return { label: tieLabel, color: 'tie', small: true }
     const d = sideById.get(id)!
     const color =
       id === 'DRAGON_TIGER' || d.pairTarget === 'either'
@@ -330,16 +336,16 @@ function BetSpots({
 
   return (
     <div className="space-y-1.5">
-      {rows.map((row, ri) => (
-        <div key={ri} className="grid grid-cols-3 gap-1.5">
+      {rows.map((row, ri) => {
+        // 主要スポット(B/P)を含む2枠行は3列中2列分に広げ、それ以外は枠数に合わせる
+        const hasMain = row.includes('B') || row.includes('P')
+        const colsClass =
+          row.length === 1 ? 'grid-cols-1' : row.length === 2 && !hasMain ? 'grid-cols-2' : 'grid-cols-3'
+        return (
+        <div key={ri} className={`grid ${colsClass} gap-1.5`}>
           {row.map((id) => {
             const m = meta(id)
-            const span =
-              (id === 'B' || id === 'P') && row.length === 2
-                ? 'col-span-2'
-                : row.length === 1
-                  ? 'col-span-3'
-                  : ''
+            const span = (id === 'B' || id === 'P') && row.length === 2 ? 'col-span-2' : ''
             return (
               <div key={id} className={span}>
                 <BetSpot
@@ -354,7 +360,8 @@ function BetSpots({
             )
           })}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
