@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { bankrollOf, useApp } from '../store'
-import { sessionRules, type BetPlacement, type HandInput, type MainBetRules, type SideBetDef, type Winner } from '../types'
+import { sessionRules, type BetPlacement, type Hand, type HandInput, type MainBetRules, type SideBetDef, type Winner } from '../types'
 import { cardsNeed, loserNeed, pairNeed, settleHand, totalNeed } from '../lib/settle'
 import { recommendedBet } from '../lib/bankroll'
 import { fmtBoth, fmtKrw, fmtSigned } from '../lib/money'
@@ -11,7 +11,8 @@ import RoadsModal from './RoadsModal'
 const DEFAULT_CHIPS = [100_000, 500_000, 1_000_000, 5_000_000]
 
 export default function PlayScreen() {
-  const { session, hands, rate, settings, addHand, undoLast, endSession } = useApp()
+  const { session, hands, rate, settings, addHand, undoLast, endSession, updateSettings } = useApp()
+  const quick = settings.quickMode !== false
   const chips = settings.chipPresets?.length === 4 ? settings.chipPresets : DEFAULT_CHIPS
   const [chip, setChip] = useState(() => chips[0])
   const [roadsOpen, setRoadsOpen] = useState(false)
@@ -37,13 +38,17 @@ export default function PlayScreen() {
   const addChip = (target: string) => setBets((b) => ({ ...b, [target]: (b[target] ?? 0) + chip }))
   const clearSpot = (target: string) => setBets((b) => ({ ...b, [target]: 0 }))
 
-  /** 結果ボタン → 補助入力の要否を判定し、不要なら即登録 */
+  /**
+   * 結果ボタン → 補助入力の要否を判定し、不要なら即登録。
+   * クイック登録では省略可(optional)の入力を自動スキップし、精算に必須のものだけ尋ねる。
+   */
+  const adjNeed = (n: ReturnType<typeof totalNeed>) => (quick && n === 'optional' ? 'none' : n)
   const onResult = (winner: Winner) => {
     const needsSheet =
-      totalNeed(winner, enabledSides, betList, rules) !== 'none' ||
-      cardsNeed(winner, null, enabledSides, betList, rules) !== 'none' ||
-      loserNeed(winner, null, null, enabledSides, betList).total !== 'none' ||
-      pairNeed(enabledSides, betList) !== 'none'
+      adjNeed(totalNeed(winner, enabledSides, betList, rules)) !== 'none' ||
+      adjNeed(cardsNeed(winner, null, enabledSides, betList, rules)) !== 'none' ||
+      adjNeed(loserNeed(winner, null, null, enabledSides, betList).total) !== 'none' ||
+      adjNeed(pairNeed(enabledSides, betList)) !== 'none'
     if (!needsSheet) {
       requestCommit({ winner, winnerTotal: null, winnerCards: null, loserTotal: null, loserCards: null, pPair: null, bPair: null })
     } else {
@@ -93,8 +98,9 @@ export default function PlayScreen() {
         </p>
       </div>
 
-      {/* 履歴 */}
+      {/* 履歴+ライブ統計(毎ハンド更新) */}
       <div className="card-luxe flex-1">
+        <LiveStats hands={hands} />
         <div className="flex items-center justify-between px-3 py-2">
           <span className="text-xs font-bold text-ink-2">履歴({hands.length}ハンド)</span>
           <div className="flex gap-1.5">
@@ -150,6 +156,20 @@ export default function PlayScreen() {
 
       {/* 操作クラスタ(親指リーチ優先で画面下部に固定) */}
       <div className="sticky bottom-0 z-20 -mx-3 -mb-3 space-y-1.5 border-t border-gold-600/25 bg-base-950/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+        {/* クイック登録トグル */}
+        <div className="flex items-center justify-between">
+          <button
+            className={`press flex h-9 items-center gap-1 rounded-full border px-3 text-[11px] font-bold ${
+              quick ? 'border-gold-500 text-gold-300' : 'border-base-700 text-ink-3'
+            }`}
+            onClick={() => void updateSettings({ quickMode: !quick })}
+          >
+            ⚡ クイック登録 {quick ? 'ON' : 'OFF'}
+          </button>
+          <span className="text-[10px] text-ink-3">
+            {quick ? '精算に必要な入力のみ・見はワンタップ' : '省略可の入力もすべて表示'}
+          </span>
+        </div>
         {/* チップ選択 */}
         <div className="flex gap-1.5">
           {chips.map((c) => (
@@ -235,6 +255,7 @@ export default function PlayScreen() {
           sideBets={enabledSides}
           bets={betList}
           rules={rules}
+          quick={quick}
           onCancel={() => setEntryWinner(null)}
           onCommit={(input) => {
             setEntryWinner(null)
@@ -272,6 +293,46 @@ export default function PlayScreen() {
 
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
       {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}
+    </div>
+  )
+}
+
+/** セッションのライブ統計(毎ハンド自動更新):B/P/T回数・率・現在の連 */
+function LiveStats({ hands }: { hands: Hand[] }) {
+  if (hands.length === 0) return null
+  const n = hands.length
+  const c: Record<Winner, number> = { B: 0, P: 0, T: 0 }
+  for (const h of hands) c[h.winner]++
+  // 現在の連:直近がタイならタイの連、それ以外はタイを挟んでもB/Pの連として数える
+  const lastW = hands[n - 1].winner
+  let streak = 0
+  if (lastW === 'T') {
+    for (let i = n - 1; i >= 0 && hands[i].winner === 'T'; i--) streak++
+  } else {
+    for (let i = n - 1; i >= 0; i--) {
+      const w = hands[i].winner
+      if (w === 'T') continue
+      if (w === lastW) streak++
+      else break
+    }
+  }
+  const pct = (x: number) => `${((x / n) * 100).toFixed(0)}%`
+  const streakColor = lastW === 'B' ? 'text-banker' : lastW === 'P' ? 'text-player' : 'text-tie'
+  return (
+    <div className="num flex items-center gap-3 border-b border-base-800 px-3 py-1.5 text-[11px]">
+      <span className="font-bold text-banker">
+        B {c.B} <span className="font-normal text-ink-3">({pct(c.B)})</span>
+      </span>
+      <span className="font-bold text-player">
+        P {c.P} <span className="font-normal text-ink-3">({pct(c.P)})</span>
+      </span>
+      <span className="font-bold text-tie">
+        T {c.T} <span className="font-normal text-ink-3">({pct(c.T)})</span>
+      </span>
+      <span className={`ml-auto font-bold ${streakColor}`}>
+        {lastW === 'B' ? 'B' : lastW === 'P' ? 'P' : 'T'}
+        {streak}連
+      </span>
     </div>
   )
 }
@@ -459,6 +520,7 @@ function ResultSheet({
   sideBets,
   bets,
   rules,
+  quick,
   onCancel,
   onCommit,
 }: {
@@ -466,6 +528,8 @@ function ResultSheet({
   sideBets: SideBetDef[]
   bets: BetPlacement[]
   rules: MainBetRules
+  /** クイック登録:省略可(optional)の入力を表示せず、必須のみで自動登録 */
+  quick: boolean
   onCancel: () => void
   onCommit: (input: HandInput) => void
 }) {
@@ -477,10 +541,13 @@ function ResultSheet({
   const [pPair, setPPair] = useState<boolean | null>(null)
   const [bPair, setBPair] = useState<boolean | null>(null)
 
-  const tn = totalNeed(winner, sideBets, bets, rules)
-  const cn = cardsNeed(winner, total, sideBets, bets, rules)
-  const ln = loserNeed(winner, total, loserTotal, sideBets, bets)
-  const pn = pairNeed(sideBets, bets)
+  type Need = ReturnType<typeof pairNeed>
+  const adj = (n: Need): Need => (quick && n === 'optional' ? 'none' : n)
+  const tn = adj(totalNeed(winner, sideBets, bets, rules))
+  const cn = adj(cardsNeed(winner, total, sideBets, bets, rules))
+  const lnRaw = loserNeed(winner, total, loserTotal, sideBets, bets)
+  const ln = { total: adj(lnRaw.total), cards: adj(lnRaw.cards) }
+  const pn = adj(pairNeed(sideBets, bets))
   // ベット中ペアの側だけ必須にする(精算に不要な側は強制しない)
   const pairBetOn = (side: 'P' | 'B') =>
     sideBets.some(
@@ -508,14 +575,14 @@ function ResultSheet({
 
   /** 追加ステップ(負け側・ペア)が無ければタップと同時に登録 */
   const autoCommitOk = (t: number | null) =>
-    pn === 'none' && loserNeed(winner, t, null, sideBets, bets).total === 'none'
+    pn === 'none' && adj(loserNeed(winner, t, null, sideBets, bets).total) === 'none'
 
   const pickTotal = (n: number) => {
     setTotal(n)
     setCards(null)
     setLoserTotal(null)
     setLoserCards(null)
-    if (cardsNeed(winner, n, sideBets, bets, rules) === 'none' && autoCommitOk(n)) {
+    if (adj(cardsNeed(winner, n, sideBets, bets, rules)) === 'none' && autoCommitOk(n)) {
       onCommit(build({ winnerTotal: n, winnerCards: null }))
     }
   }

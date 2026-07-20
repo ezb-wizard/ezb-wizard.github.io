@@ -163,6 +163,8 @@ export interface Settings {
   chipUnit: number
   /** ベットチッププリセット(KRW・4種) */
   chipPresets?: number[]
+  /** クイック登録:精算に必須の入力だけを求め、省略可の入力は自動スキップ */
+  quickMode?: boolean
   manualRate: number | null
   /** true: 手動レートを固定使用(自動更新しない) */
   manualRateFixed: boolean
@@ -177,6 +179,7 @@ export const DEFAULT_SETTINGS: Settings = {
   betPct: 1.5,
   chipUnit: 10_000,
   chipPresets: [100_000, 500_000, 1_000_000, 5_000_000],
+  quickMode: true,
   manualRate: null,
   manualRateFixed: false,
   manualRateTs: null,

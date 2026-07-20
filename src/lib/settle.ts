@@ -88,10 +88,17 @@ const betOn = (defs: SideBetDef[], bets: BetPlacement[]) =>
 const need = (defs: SideBetDef[], bets: BetPlacement[]): InputNeed =>
   defs.length === 0 ? 'none' : betOn(defs, bets) ? 'required' : 'optional'
 
+const NEED_RANK: Record<InputNeed, number> = { none: 0, optional: 1, required: 2 }
+const maxNeed = (a: InputNeed, b: InputNeed): InputNeed => (NEED_RANK[a] >= NEED_RANK[b] ? a : b)
+
+const mainBetOn = (target: string, bets: BetPlacement[]) =>
+  bets.some((b) => b.target === target && b.amount > 0)
+
 /**
  * 勝利合計値の入力要否。
- * EZ/スーパー6ルールのバンカー勝ちは常に必須(D7プッシュ・6半額の判定は本線精算に不可欠)。
- * それ以外は、合計値条件を持つ有効サイドベットがある場合のみ表示し、ベット中なら必須。
+ * EZ/スーパー6ルールのバンカー勝ちは、バンカー本線にベット中なら必須
+ * (D7プッシュ・6半額の判定は本線精算に不可欠)。未ベットなら省略可(記録・罫線用)。
+ * サイドベットは、合計値条件を持つ定義が有効な場合に表示し、ベット中なら必須。
  */
 export function totalNeed(
   winner: Winner,
@@ -99,11 +106,14 @@ export function totalNeed(
   bets: BetPlacement[],
   rules: MainBetRules,
 ): InputNeed {
-  if (winner === 'B' && rules.bankerRule !== 'commission') return 'required'
+  let mainN: InputNeed = 'none'
+  if (winner === 'B' && rules.bankerRule !== 'commission') {
+    mainN = mainBetOn('B', bets) ? 'required' : 'optional'
+  }
   const defs = sideBets.filter(
     (d) => d.enabled && !d.pairTarget && d.side === winner && d.rules.some((r) => r.totals.length > 0),
   )
-  return need(defs, bets)
+  return maxNeed(mainN, need(defs, bets))
 }
 
 /** ルールの totals 条件が「現時点の勝ち側合計の情報」でまだ成立しうるか */
@@ -123,7 +133,11 @@ export function cardsNeed(
   bets: BetPlacement[],
   rules: MainBetRules,
 ): InputNeed {
-  if (winner === 'B' && total === 7 && rules.bankerRule === 'ez') return 'required'
+  let mainN: InputNeed = 'none'
+  if (winner === 'B' && total === 7 && rules.bankerRule === 'ez') {
+    // D7プッシュ判定:バンカー本線ベット中は必須、未ベットなら省略可
+    mainN = mainBetOn('B', bets) ? 'required' : 'optional'
+  }
   if (winner === 'T') return 'none'
   const defs = sideBets.filter(
     (d) =>
@@ -135,7 +149,7 @@ export function cardsNeed(
           (r.cards !== 'any' || (r.totalCards?.length ?? 0) > 0) && totalsMayMatch(r, total),
       ),
   )
-  return need(defs, bets)
+  return maxNeed(mainN, need(defs, bets))
 }
 
 /**

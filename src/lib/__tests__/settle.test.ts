@@ -87,8 +87,9 @@ describe('本線精算(スーパー6式:ノーコミッション・バンカー6
     expect(settleBet({ target: 'B', amount: 10000 }, tie(6), ctxS6)).toBe(0)
     expect(settleBet({ target: 'B', amount: 10000 }, pWin(8), ctxS6)).toBe(-10000)
   })
-  it('スーパー6式ではバンカー勝ちの合計値が常に必須(半額判定に不可欠)', () => {
-    expect(totalNeed('B', [], [], SUPER6)).toBe('required')
+  it('スーパー6式ではバンカー本線ベット中のみ合計値が必須(未ベットは省略可)', () => {
+    expect(totalNeed('B', [], [{ target: 'B', amount: 10000 }], SUPER6)).toBe('required')
+    expect(totalNeed('B', [], [], SUPER6)).toBe('optional')
     expect(cardsNeed('B', 6, [], [], SUPER6)).toBe('none')
     expect(totalNeed('P', [], [], SUPER6)).toBe('none')
   })
@@ -181,9 +182,12 @@ describe('複数同時ベットの精算', () => {
 
 describe('補助入力の要否判定', () => {
   const ezSides = presetSideBets() // D7/B6/P7 有効
-  it('EZルールのバンカー勝ちは常に合計値必須、合計7は枚数必須', () => {
-    expect(totalNeed('B', ezSides, [], EZ8)).toBe('required')
-    expect(cardsNeed('B', 7, ezSides, [], EZ8)).toBe('required')
+  it('EZルールのバンカー本線ベット中は合計値必須、合計7は枚数必須(未ベットは省略可)', () => {
+    const bBet = [{ target: 'B', amount: 10000 }]
+    expect(totalNeed('B', ezSides, bBet, EZ8)).toBe('required')
+    expect(cardsNeed('B', 7, ezSides, bBet, EZ8)).toBe('required')
+    expect(totalNeed('B', ezSides, [], EZ8)).toBe('optional')
+    expect(cardsNeed('B', 7, ezSides, [], EZ8)).toBe('optional')
     expect(cardsNeed('B', 5, ezSides, [], EZ8)).toBe('none')
   })
   it('コミッション式+サイドベット全OFFなら追加入力は一切不要(最小タップ)', () => {
