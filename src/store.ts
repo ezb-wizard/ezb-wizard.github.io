@@ -35,7 +35,8 @@ interface AppState {
   updateSettings(patch: Partial<Settings>): Promise<void>
 
   startSession(cfg: Omit<Session, 'id' | 'startedAt' | 'endedAt' | 'endKrw' | 'handCount'>): Promise<void>
-  endSession(): Promise<Session>
+  /** endKrwOverride: 結果のみ記録モードで終了資金を手入力した場合の上書き値 */
+  endSession(endKrwOverride?: number): Promise<Session>
   addHand(input: HandInput, bets: BetPlacement[]): Promise<void>
   /** 途中参加時などに過去の出目を「見」としてまとめて登録 */
   addHandsBulk(winners: Winner[]): Promise<void>
@@ -142,13 +143,13 @@ export const useApp = create<AppState>((set, get) => ({
     set({ session: { ...session, id }, hands: [], screen: 'play' })
   },
 
-  async endSession() {
+  async endSession(endKrwOverride) {
     const { session, hands } = get()
     if (!session?.id) throw new Error('セッションがありません')
     const done: Session = {
       ...session,
       endedAt: Date.now(),
-      endKrw: bankrollOf(session, hands),
+      endKrw: endKrwOverride ?? bankrollOf(session, hands),
       handCount: hands.length,
     }
     await db.sessions.put(done)

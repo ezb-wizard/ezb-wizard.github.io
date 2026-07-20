@@ -165,6 +165,11 @@ export interface Settings {
   chipPresets?: number[]
   /** クイック登録:精算に必須の入力だけを求め、省略可の入力は自動スキップ */
   quickMode?: boolean
+  /**
+   * true = ベット額も記録(チップ・ベットスポット表示、精算・収支を自動計算)。
+   * false(既定)= 結果のみ記録(金額入力なし。収支はセッション終了時の手入力)
+   */
+  betTracking?: boolean
   manualRate: number | null
   /** true: 手動レートを固定使用(自動更新しない) */
   manualRateFixed: boolean
@@ -180,6 +185,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chipUnit: 10_000,
   chipPresets: [100_000, 500_000, 1_000_000, 5_000_000],
   quickMode: true,
+  betTracking: false,
   manualRate: null,
   manualRateFixed: false,
   manualRateTs: null,

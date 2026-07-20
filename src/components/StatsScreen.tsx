@@ -174,7 +174,20 @@ function SummaryCards({
   sel: number | 'all' | null
   curRate: number | null
 }) {
-  const net = hands.reduce((s, h) => s + h.net, 0)
+  // 結果のみ記録モードではハンドのnetが0のため、確定セッションはendKrw(終了資金の手入力含む)から収支を出す
+  const net = useMemo(() => {
+    if (sel !== 'all' && typeof sel === 'number') {
+      const s = sessionById.get(sel)
+      if (s?.endKrw != null) return s.endKrw - s.startKrw
+      return hands.reduce((sum, h) => sum + h.net, 0)
+    }
+    let total = 0
+    for (const s of sessionById.values()) {
+      if (s.endKrw != null) total += s.endKrw - s.startKrw
+      else total += hands.filter((h) => h.sessionId === s.id).reduce((sum, h) => sum + h.net, 0)
+    }
+    return total
+  }, [hands, sessionById, sel])
   const betHands = hands.filter((h) => h.bets.length > 0)
   const avgBet =
     betHands.length === 0

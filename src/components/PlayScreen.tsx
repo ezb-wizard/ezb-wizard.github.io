@@ -4,7 +4,7 @@ import { sessionRules, type BetPlacement, type Hand, type HandInput, type MainBe
 import { cardsNeed, loserNeed, pairNeed, settleHand, totalNeed } from '../lib/settle'
 import { recommendedBet } from '../lib/bankroll'
 import { fmtBoth, fmtKrw, fmtSigned } from '../lib/money'
-import { Confirm, GhostBtn } from './ui'
+import { Confirm, Field, GhostBtn, Modal, NumInput, PrimaryBtn } from './ui'
 import HandEditModal from './HandEditModal'
 import RoadsModal from './RoadsModal'
 import RecommendModal from './RecommendModal'
@@ -14,6 +14,9 @@ const DEFAULT_CHIPS = [100_000, 500_000, 1_000_000, 5_000_000]
 export default function PlayScreen() {
   const { session, hands, rate, settings, addHand, undoLast, endSession, updateSettings } = useApp()
   const quick = settings.quickMode !== false
+  // 結果のみ記録モード(既定): ベット額の入力UIを出さず、精算は行わない(収支は終了時に手入力)
+  const betTracking = settings.betTracking === true
+  const [endKrwInput, setEndKrwInput] = useState<number | null>(null)
   const chips = settings.chipPresets?.length === 4 ? settings.chipPresets : DEFAULT_CHIPS
   const [chip, setChip] = useState(() => chips[0])
   const [roadsOpen, setRoadsOpen] = useState(false)
@@ -31,9 +34,11 @@ export default function PlayScreen() {
   const curRate = rate?.rate ?? session.rate
   const rules = sessionRules(session)
   const enabledSides = session.sideBets.filter((d) => d.enabled)
-  const betList: BetPlacement[] = Object.entries(bets)
-    .filter(([, v]) => v > 0)
-    .map(([target, amount]) => ({ target, amount }))
+  const betList: BetPlacement[] = betTracking
+    ? Object.entries(bets)
+        .filter(([, v]) => v > 0)
+        .map(([target, amount]) => ({ target, amount }))
+    : []
   const betTotal = betList.reduce((s, b) => s + b.amount, 0)
   const rec = recommendedBet(bankroll, settings.betPct, settings.chipUnit, session.tableMin)
 
@@ -178,6 +183,9 @@ export default function PlayScreen() {
             {quick ? '精算に必要な入力のみ・見はワンタップ' : '省略可の入力もすべて表示'}
           </span>
         </div>
+        {/* ベット額の記録UI(設定「ベット額も記録」時のみ表示) */}
+        {betTracking && (
+          <>
         {/* チップ選択 */}
         <div className="flex gap-1.5">
           {chips.map((c) => (
@@ -232,6 +240,8 @@ export default function PlayScreen() {
             </button>
           )}
         </div>
+          </>
+        )}
 
         {/* 結果ボタン(1ハンド3タップ以内の起点) */}
         <div className="grid grid-cols-3 gap-1.5">
@@ -286,18 +296,51 @@ export default function PlayScreen() {
         />
       )}
 
-      {confirmEnd && (
-        <Confirm
-          message="セッションを終了しますか?"
-          detail={`現在資金 ${fmtBoth(bankroll, curRate)} / ${hands.length}ハンド`}
-          okLabel="終了する"
-          onOk={() => {
-            setConfirmEnd(false)
-            void endSession()
-          }}
-          onCancel={() => setConfirmEnd(false)}
-        />
-      )}
+      {confirmEnd &&
+        (betTracking ? (
+          <Confirm
+            message="セッションを終了しますか?"
+            detail={`現在資金 ${fmtBoth(bankroll, curRate)} / ${hands.length}ハンド`}
+            okLabel="終了する"
+            onOk={() => {
+              setConfirmEnd(false)
+              void endSession()
+            }}
+            onCancel={() => setConfirmEnd(false)}
+          />
+        ) : (
+          // 結果のみ記録モード:収支を残したい場合は終了資金を手入力(任意)
+          <Modal
+            title="セッションを終了"
+            onClose={() => setConfirmEnd(false)}
+            footer={
+              <PrimaryBtn
+                className="h-12"
+                onClick={() => {
+                  setConfirmEnd(false)
+                  void endSession(endKrwInput ?? undefined)
+                  setEndKrwInput(null)
+                }}
+              >
+                終了する
+              </PrimaryBtn>
+            }
+          >
+            <div className="space-y-2 pb-2">
+              <Field label={`終了時の資金(KRW・任意)/ 開始 ${fmtKrw(session.startKrw)}`}>
+                <NumInput
+                  value={endKrwInput}
+                  onChange={setEndKrwInput}
+                  placeholder={session.startKrw.toLocaleString('ja-JP')}
+                />
+              </Field>
+              <p className="text-[10px] leading-relaxed text-ink-3">
+                入力すると開始資金との差がこのセッションの収支として記録されます(未入力の場合は±0)。
+                {hands.length}ハンドの出目記録はどちらでも保存されます。
+              </p>
+            </div>
+          </Modal>
+        ))}
 
       {editingId != null && <HandEditModal handId={editingId} onClose={() => setEditingId(null)} />}
       {roadsOpen && <RoadsModal onClose={() => setRoadsOpen(false)} />}

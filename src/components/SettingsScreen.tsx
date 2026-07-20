@@ -40,7 +40,21 @@ export default function SettingsScreen() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-gold-300">資金管理</h2>
+        <h2 className="text-sm font-bold text-gold-300">記録・資金管理</h2>
+        <Field label="記録モード">
+          <Seg
+            options={[
+              { value: 0, label: '結果のみ' },
+              { value: 1, label: 'ベット額も記録' },
+            ]}
+            value={settings.betTracking === true ? 1 : 0}
+            onChange={(v) => void updateSettings({ betTracking: v === 1 })}
+          />
+          <p className="mt-1 text-[10px] leading-relaxed text-ink-3">
+            結果のみ(既定): 金額入力なしで出目だけを登録。収支はセッション終了時に終了資金を手入力すると記録されます。
+            ベット額も記録: チップとベットスポットが表示され、ハンドごとの精算・収支を自動計算します。
+          </p>
+        </Field>
         <Field label={`推奨ベット率:資金の ${settings.betPct}%(1〜10%)`}>
           <input
             type="range"
