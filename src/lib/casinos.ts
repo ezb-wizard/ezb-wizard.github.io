@@ -117,7 +117,7 @@ export function casinoPreset(id: CasinoId): CasinoConfig {
         enabled: true,
         preset: true,
       },
-      ...pairBets(),
+      // PARADISEのDragon Tiger台にはペアベットなし(2026-07 実テーブル確認)
       ...dragonTigerFamily(15, 30),
       {
         id: 'DRAGON_TIGER',

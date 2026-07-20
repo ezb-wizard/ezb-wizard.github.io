@@ -37,11 +37,11 @@
   th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}
   th{color:var(--ink3);font-weight:600;font-size:12px}
   td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-  .spots{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:10px 0;font-size:11.5px;text-align:center}
+  .spots{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:10px 0;font-size:11.5px;text-align:center}
   .spots div{border:1.5px solid var(--line);border-radius:10px;padding:10px 2px;background:var(--panel)}
   .sB{border-color:var(--banker)!important}.sP{border-color:var(--player)!important}
   .sT{border-color:var(--tie)!important}.sG{border-color:var(--gold)!important}
-  .w2{grid-column:span 2}
+  .s2{grid-column:span 2}.s3{grid-column:span 3}.s6{grid-column:span 6}
   .toc{font-size:14px}
   .toc a{color:var(--gold-l);text-decoration:none}
   .toc a:active{opacity:.7}
@@ -114,11 +114,13 @@
   <h3>4-1. ベットを置く</h3>
   <p>画面下部のチップ(10万/50万/100万/500万・変更可)を選び、賭けたい場所をタップ。タップするたび加算、<b>✕</b>で取り消し。配置は実際のテーブルと同じです:</p>
   <div class="spots">
-    <div class="sP">スモール<br>ドラゴン</div><div class="sG">ドラゴン<br>タイガー</div><div class="sP">ビッグ<br>ドラゴン</div>
-    <div class="sB">スモール<br>タイガー</div><div class="sT">タイ</div><div class="sB">ビッグ<br>タイガー</div>
-    <div class="sB">バンカー<br>ペア</div><div class="sB w2">バンカー</div>
-    <div class="sP">プレイヤー<br>ペア</div><div class="sP w2">プレイヤー</div>
+    <div class="sP s2">スモール<br>ドラゴン</div><div class="sG s2">ドラゴン<br>タイガー</div><div class="sP s2">ビッグ<br>ドラゴン</div>
+    <div class="sB s3">スモールタイガー</div><div class="sB s3">ビッグタイガー</div>
+    <div class="sT s3">タイ0〜6</div><div class="sT s3">タイ7〜9</div>
+    <div class="sB s6">バンカー</div>
+    <div class="sP s6">プレイヤー</div>
   </div>
+  <p class="note">※ 上図はPARADISEのDragon Tiger台(ペアなし・本線タイなし)。INSPIREではペアベット等が加わり、有効なベットに合わせて配置が自動で変わります。</p>
   <p class="note">賭けずに結果だけ記録する「見(けん)」もできます — ベットを置かずに結果ボタンを押すだけ。</p>
 
   <h3>4-2. 結果を入れる</h3>

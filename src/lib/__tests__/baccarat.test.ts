@@ -127,6 +127,9 @@ describe('PARADISE実テーブル値(2026-07確認)', () => {
     expect(i.sideBets.find((d) => d.id === 'SMALL_TIGER')!.rules[0].payout).toBe(22)
     expect(i.sideBets.find((d) => d.id === 'BIG_TIGER')!.rules[0].payout).toBe(50)
     expect(i.mainBets.tieEnabled ?? true).toBe(true)
+    // ペアベットはPARADISEになし・INSPIREにあり
+    expect(p.sideBets.some((d) => d.pairTarget)).toBe(false)
+    expect(i.sideBets.some((d) => d.pairTarget)).toBe(true)
   })
   it('TIE MAXの成立確率と控除率が完全列挙から動的算出される', () => {
     const t = getTheoreticalStats()
